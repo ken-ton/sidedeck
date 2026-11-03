@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, AudioDevice, DeckStatus, PluginButtonState, States, WindowApp } from "./api";
-import { cloneButton, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, runsInBackend, shortcutEntries, shortcutUser, TOGGLE_SHORTCUT_ID, uid } from "./deck";
+import { cloneButton, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, TOGGLE_SHORTCUT_ID, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
@@ -147,15 +147,21 @@ export default function App() {
   }, []);
 
   const commit = useCallback((next: DeckData) => {
-    setDeck(next);
-    api.saveDeck(next).catch((e) => showToast(`保存できませんでした: ${e}`));
+    const pruned = pruneOrphanFolders(next);
+    setDeck(pruned);
+    api.saveDeck(pruned).catch((e) => showToast(`保存できませんでした: ${e}`));
   }, [showToast]);
 
   useEffect(() => {
     api.getDeck().then((saved) => {
-      const d = saved?.version === 1 && saved.pages?.length ? saved : defaultDeck();
+      const d = saved?.version === 1 && saved.pages?.length ? pruneOrphanFolders(saved) : defaultDeck();
       setDeck(d);
       if (!saved) api.saveDeck(d);
+    });
+    api.takeStartupWarning().then((w) => {
+      if (!w) return;
+      setToast(w);
+      window.setTimeout(() => setToast((t) => (t === w ? null : t)), 15_000);
     });
     api.deckStatus().then(setStatus);
     api.getForegroundApp().then(setForeground);
@@ -219,23 +225,48 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entriesKey]);
 
-  const pluginButtonsKey = JSON.stringify(
-    deck?.pages.flatMap((p) =>
-      p.buttons.flatMap((b) =>
-        b.action.type === "plugin" ? [{ pluginId: b.action.pluginId, context: b.id, action: b.action.actionId, settings: b.action.settings }] : [],
-      ),
-    ) ?? null,
+  const pluginButtons = useMemo(
+    () =>
+      deck?.pages.flatMap((p) =>
+        p.buttons.flatMap((b) =>
+          b.action.type === "plugin" ? [{ pluginId: b.action.pluginId, context: b.id, action: b.action.actionId, settings: b.action.settings }] : [],
+        ),
+      ) ?? null,
+    [deck],
   );
+  const pluginButtonsKey = JSON.stringify(pluginButtons);
+  const sentPluginButtons = useRef<Map<string, string>>(new Map());
   useEffect(() => {
-    const buttons = JSON.parse(pluginButtonsKey);
-    if (buttons) api.setPluginButtons(buttons);
+    if (!pluginButtons) return;
+    api.setPluginButtons(pluginButtons);
+    // 設定が変わったボタンや、プラグイン以外の操作になったボタンには、古い表示を残さない（プラグインが送り直す）
+    const next = new Map(pluginButtons.map((b) => [b.context, JSON.stringify(b)]));
+    const prev = sentPluginButtons.current;
+    const stale = [...prev.keys()].filter((id) => next.get(id) !== prev.get(id));
+    sentPluginButtons.current = next;
+    if (stale.length) setPluginStates((s) => Object.fromEntries(Object.entries(s).filter(([id]) => !stale.includes(id))));
+    // 中身が変わったときだけ送る
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pluginButtonsKey]);
+
+  // 止まったプラグインのボタンは、プラグインが送った表示をやめて、ボタン自身の設定に戻す
+  useEffect(() => {
+    const un = listen("plugins-changed", async () => {
+      const running = new Set((await api.listPlugins()).filter((p) => p.status === "running").map((p) => p.id));
+      const stopped = new Set((pluginButtons ?? []).filter((b) => !running.has(b.pluginId)).map((b) => b.context));
+      if (stopped.size) setPluginStates((prev) => Object.fromEntries(Object.entries(prev).filter(([id]) => !stopped.has(id))));
+    });
+    return () => {
+      un.then((f) => f());
+    };
+  }, [pluginButtons]);
 
   // 通常時はフォーカスを奪わないようにし、編集中だけキーボード入力を受け付ける
   useEffect(() => {
-    api.setFocusable(editing);
+    // 設定画面にもショートカットの記録欄があるので、開いている間はキー入力を受け付ける
+    api.setFocusable(editing || overlay === "settings");
     if (!editing) setMoving(null);
-  }, [editing, status.active]);
+  }, [editing, overlay, status.active]);
 
   const roots = useMemo(() => deck?.pages.filter((p) => !p.folder) ?? [], [deck]);
   const page = useMemo(() => {
@@ -374,7 +405,8 @@ export default function App() {
   const subFor = (b: DeckButton) => {
     const a = b.action;
     if (editing && shortcutErrors[b.id]) return "⚠ ショートカット";
-    if (pluginStates[b.id]?.sub) return pluginStates[b.id].sub;
+    const ps = a.type === "plugin" ? pluginStates[b.id] : undefined;
+    if (ps?.sub) return ps.sub;
     if (a.type === "mic_mute" && states.micMuted) return "ミュート中";
     if (a.type === "audio_device" && a.deviceIds.length !== 1) return outputs.find((d) => d.id === states.defaultOutput)?.name ?? null;
     if (a.type === "page") return "📁";
@@ -389,8 +421,9 @@ export default function App() {
     if (flash?.id === b.id) c.push(flash.ok ? "fired" : "failed");
     if (moving === b.id) c.push("moving");
     if (runningMacros.has(b.id)) c.push("running");
-    if (pluginStates[b.id]?.state === "active") c.push("active");
-    if (pluginStates[b.id]?.state === "alert") c.push("alert");
+    const ps = a.type === "plugin" ? pluginStates[b.id] : undefined;
+    if (ps?.state === "active") c.push("active");
+    if (ps?.state === "alert") c.push("alert");
     return c.join(" ");
   };
 

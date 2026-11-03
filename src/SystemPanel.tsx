@@ -114,7 +114,7 @@ export default function SystemPanel({ onClose }: { onClose: () => void }) {
           <section>
             <h2>解像度（Deck 用モニター）</h2>
             <div className="chips wrap">
-              {resolutions.slice(0, 6).map((m) => {
+              {resolutions.map((m) => {
                 const on = m.width === modes.current.width && m.height === modes.current.height;
                 return (
                   <button key={modeKey(m)} className={on ? "on" : ""} onClick={() => !on && changeMode(m)}>

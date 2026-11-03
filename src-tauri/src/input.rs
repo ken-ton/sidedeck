@@ -76,13 +76,15 @@ fn vk_for(name: &str) -> Option<(VIRTUAL_KEY, bool)> {
 
 fn key_input(vk: VIRTUAL_KEY, media: bool, up: bool) -> INPUT {
     let mut flags = KEYBD_EVENT_FLAGS(0);
-    let (wvk, wscan) = if media {
+    // ゲームの多くはスキャンコード（DirectInput / Raw Input）で読むので、スキャンコードで送る。
+    // ただし E1 プレフィックスのキー（Pause = 0xE11D）は SendInput で表せず、
+    // 下位バイトだけ送ると右 Ctrl になってしまうので、スキャンコードを持たないキーと同様に VK で送る。
+    let sc = if media { 0 } else { unsafe { MapVirtualKeyW(vk.0 as u32, MAPVK_VK_TO_VSC_EX) } };
+    let (wvk, wscan) = if sc == 0 || sc & 0xFF00 == 0xE100 {
         (vk, 0)
     } else {
-        // ゲームの多くはスキャンコード（DirectInput / Raw Input）で読むので、スキャンコードで送る
-        let sc = unsafe { MapVirtualKeyW(vk.0 as u32, MAPVK_VK_TO_VSC_EX) };
         flags |= KEYEVENTF_SCANCODE;
-        if sc & 0xFF00 == 0xE000 || sc & 0xFF00 == 0xE100 {
+        if sc & 0xFF00 == 0xE000 {
             flags |= KEYEVENTF_EXTENDEDKEY;
         }
         (VIRTUAL_KEY(0), (sc & 0xFF) as u16)
@@ -186,7 +188,13 @@ pub fn mask_menu_key() {
 /// Unicode 入力なので、ゲームには効かないことが多い。
 pub fn send_text(text: &str) -> Result<(), String> {
     let mut inputs = Vec::new();
-    for unit in text.encode_utf16() {
+    // 改行を U+000A のまま送っても多くのアプリは改行にしないので、Enter キーとして送る
+    for unit in text.replace("\r\n", "\n").encode_utf16() {
+        if unit == u16::from(b'\n') {
+            inputs.push(key_input(VK_RETURN, false, false));
+            inputs.push(key_input(VK_RETURN, false, true));
+            continue;
+        }
         for up in [false, true] {
             let mut flags = KEYEVENTF_UNICODE;
             if up {

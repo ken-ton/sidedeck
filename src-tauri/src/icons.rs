@@ -42,7 +42,7 @@ pub fn icon_for(target: &str) -> Option<String> {
 fn shell_icon(path: &str, size: i32) -> Option<String> {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
-        let wide: Vec<u16> = path.encode_utf16().chain(Some(0)).collect();
+        let wide = crate::display::to_wide(path);
         let factory: IShellItemImageFactory = SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None).ok()?;
         let hbmp = factory
             .GetImage(SIZE { cx: size, cy: size }, SIIGBF_ICONONLY | SIIGBF_BIGGERSIZEOK)

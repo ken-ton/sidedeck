@@ -17,6 +17,15 @@ export default function ShortcutField({ value, onChange, registeredError, usedBy
   const [checkError, setCheckError] = useState<string | null>(null);
   const keys = value ?? [];
 
+  // 記録中は win-deck のショートカットを外す（登録済みのキーが記録欄に届かず、ボタンが実行されてしまうため）
+  useEffect(() => {
+    if (!recording) return;
+    api.suspendShortcuts(true);
+    return () => {
+      api.suspendShortcuts(false);
+    };
+  }, [recording]);
+
   useEffect(() => {
     setCheckError(null);
     if (keys.length === 0) return;

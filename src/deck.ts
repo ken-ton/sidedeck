@@ -301,3 +301,23 @@ export function shortcutUser(deck: DeckData, keys: string[] | undefined, selfId:
   const k = shortcutKey(keys);
   return shortcutEntries(deck).find((e) => e.id !== selfId && shortcutKey(e.keys) === k)?.label ?? null;
 }
+
+/**
+ * どのページからも辿れなくなったフォルダを消す。入れ子のフォルダの中身が孤立したまま残ると、
+ * 画面からは消えたのにショートカットだけが登録され続けるため。
+ */
+export function pruneOrphanFolders(deck: DeckData): DeckData {
+  const byId = new Map(deck.pages.map((p) => [p.id, p]));
+  const reachable = new Set<string>();
+  const stack = deck.pages.filter((p) => !p.folder).map((p) => p.id);
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (reachable.has(id)) continue;
+    reachable.add(id);
+    for (const b of byId.get(id)?.buttons ?? []) {
+      if (b.action.type === "page" && byId.has(b.action.pageId)) stack.push(b.action.pageId);
+    }
+  }
+  if (reachable.size === deck.pages.length) return deck;
+  return { ...deck, pages: deck.pages.filter((p) => reachable.has(p.id)) };
+}

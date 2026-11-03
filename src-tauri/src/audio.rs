@@ -15,7 +15,7 @@ pub struct AudioDevice {
     pub is_default: bool,
 }
 
-fn enumerator() -> Result<IMMDeviceEnumerator, String> {
+pub(crate) fn enumerator() -> Result<IMMDeviceEnumerator, String> {
     unsafe {
         // 既に初期化済み（S_FALSE / RPC_E_CHANGED_MODE）でも続行できる
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
@@ -85,7 +85,7 @@ pub fn set_default_output(id: &str) -> Result<(), String> {
         unk.query(&IID_IPOLICY_CONFIG, &mut p).ok().map_err(|e| format!("IPolicyConfig: {e}"))?;
         let vtbl = *(p as *const *const usize);
         let set: SetDefaultEndpoint = std::mem::transmute(*vtbl.add(SET_DEFAULT_ENDPOINT));
-        let wide: Vec<u16> = id.encode_utf16().chain(Some(0)).collect();
+        let wide = crate::display::to_wide(id);
         let mut result = Ok(());
         for role in [eConsole, eMultimedia, eCommunications] {
             if let Err(e) = set(p, PCWSTR(wide.as_ptr()), role).ok() {

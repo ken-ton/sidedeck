@@ -67,6 +67,8 @@ export const api = {
   runAction: (action: Action, buttonId?: string) => invoke<string | null>("run_action", { action, buttonId }),
   setShortcuts: (entries: { id: string; keys: string[] }[]) => invoke<{ id: string; error: string | null }[]>("set_shortcuts", { entries }),
   checkShortcut: (keys: string[]) => invoke<string | null>("check_shortcut", { keys }),
+  suspendShortcuts: (suspended: boolean) => invoke<void>("suspend_shortcuts", { suspended }),
+  takeStartupWarning: () => invoke<string | null>("take_startup_warning"),
   listPlugins: () => invoke<PluginInfo[]>("list_plugins"),
   pluginGetOptions: (pluginId: string, source: string, settings: Record<string, unknown>) =>
     invoke<PluginOption[]>("plugin_get_options", { pluginId, source, settings }),

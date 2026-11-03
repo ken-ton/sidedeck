@@ -113,9 +113,24 @@ export default function PluginFields({ action, onChange, onSuggestLabel }: {
   const plugin = plugins.find((p) => p.id === action.pluginId);
   const def = plugin?.actions.find((a) => a.id === action.actionId);
   const set = (patch: Partial<PluginAction>) => onChange({ ...action, ...patch });
-  const setValue = (key: string, value: unknown) => set({ settings: { ...action.settings, [key]: value } });
+  // 依存元が変わったら依存先の値は意味を失う（例: 種類を変えたら項目の id は別の物を指す）ので、連鎖的に消す
+  const setValue = (key: string, value: unknown) => {
+    const settings: Record<string, unknown> = { ...action.settings, [key]: value };
+    const changed = [key];
+    while (changed.length) {
+      const k = changed.pop()!;
+      for (const f of def?.fields ?? []) {
+        if (f.dependsOn?.includes(k) && f.key in settings) {
+          delete settings[f.key];
+          changed.push(f.key);
+        }
+      }
+    }
+    set({ settings });
+  };
 
   const chooseAction = (pluginId: string, actionId: string) => {
+    if (pluginId === action.pluginId && actionId === action.actionId) return;
     const p = plugins.find((x) => x.id === pluginId);
     const d = p?.actions.find((x) => x.id === actionId);
     const settings: Record<string, unknown> = {};

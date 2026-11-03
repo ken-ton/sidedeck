@@ -260,7 +260,7 @@ pub fn ddc_get_brightness(gdi: &str) -> Option<u32> {
         if unsafe { GetMonitorBrightness(h, &mut min, &mut cur, &mut max) } == 0 || max <= min {
             return None;
         }
-        Some((cur - min) * 100 / (max - min))
+        Some(cur.saturating_sub(min).min(max - min) * 100 / (max - min))
     })
 }
 

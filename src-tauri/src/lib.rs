@@ -36,6 +36,8 @@ struct AppState {
     config: Mutex<Config>,
     config_path: PathBuf,
     deck: Mutex<Deck>,
+    /// 起動時に伝えたいこと（設定ファイルを退避したなど）。画面が一度だけ受け取る
+    startup_warning: Mutex<Option<String>>,
 }
 
 impl AppState {
@@ -120,7 +122,20 @@ fn enter_deck(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// ソフトウェア減光は Windows に残り続けるので、Deck モードの終了時と win-deck の終了時に元に戻す。
+fn restore_gamma(app: &AppHandle) {
+    let st = app.state::<AppState>();
+    let dimmed = st.deck.lock().unwrap().gamma < 1.0;
+    if dimmed {
+        if let Ok(mon) = st.deck_monitor() {
+            display::gamma_set(&mon.gdi_name, 1.0);
+        }
+        st.deck.lock().unwrap().gamma = 1.0;
+    }
+}
+
 fn exit_deck(app: &AppHandle) -> Result<(), String> {
+    restore_gamma(app);
     let st = app.state::<AppState>();
     st.deck.lock().unwrap().active = false;
     if let Some(win) = app.get_webview_window("main") {
@@ -139,7 +154,23 @@ fn spawn_monitor_watcher(app: AppHandle) {
         let mut last: Option<bool> = None;
         loop {
             let st = app.state::<AppState>();
-            let connected = st.deck_monitor().is_ok();
+            let mon = st.deck_monitor().ok();
+            let connected = mon.is_some();
+            // 画面配置や解像度が変わったら、デッキの位置を合わせ直す
+            if let Some(m) = &mon {
+                let moved = {
+                    let mut d = st.deck.lock().unwrap();
+                    let rect = (m.x, m.y, m.width, m.height);
+                    let moved = d.active && d.rect != rect;
+                    if moved {
+                        d.rect = rect;
+                    }
+                    moved
+                };
+                if moved {
+                    place_main_fullscreen(&app);
+                }
+            }
             if last != Some(connected) {
                 let first = last.is_none();
                 last = Some(connected);
@@ -286,6 +317,11 @@ async fn set_shortcuts(app: AppHandle, entries: Vec<shortcuts::Entry>) -> Vec<sh
 }
 
 #[tauri::command]
+async fn suspend_shortcuts(app: AppHandle, suspended: bool) {
+    shortcuts::suspend(&app, suspended);
+}
+
+#[tauri::command]
 async fn check_shortcut(app: AppHandle, keys: Vec<String>) -> Option<String> {
     shortcuts::check(&app, &keys)
 }
@@ -339,6 +375,11 @@ async fn open_plugins_folder(app: AppHandle) -> CmdResult<()> {
     use tauri_plugin_opener::OpenerExt;
     let dir = plugins::dir(&app);
     app.opener().open_path(dir.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn take_startup_warning(app: AppHandle) -> Option<String> {
+    app.state::<AppState>().startup_warning.lock().unwrap().take()
 }
 
 #[tauri::command]
@@ -492,7 +533,10 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
                     let _ = w.set_focus();
                 }
             }
-            "quit" => app.exit(0),
+            "quit" => {
+                restore_gamma(app);
+                app.exit(0);
+            }
             _ => {}
         })
         .build(app)?;
@@ -517,7 +561,7 @@ pub fn run() {
         ))
         .setup(|app| {
             let config_path = app.path().app_config_dir()?.join("config.json");
-            let mut config = Config::load(&config_path);
+            let (mut config, startup_warning) = Config::load(&config_path);
 
             // 旧バージョンが変更した画面配置が残っていたら元に戻す
             if let Some(layout) = config.saved_layout.take() {
@@ -529,12 +573,14 @@ pub fn run() {
 
             app.manage(AppState {
                 config: Mutex::new(config),
+                startup_warning: Mutex::new(startup_warning),
                 config_path,
                 deck: Mutex::new(Deck { gamma: 1.0, ..Default::default() }),
             });
 
             app.manage(foreground::LastForeground::default());
             app.manage(shortcuts::Registered::default());
+            app.manage(shortcuts::LastEntries::default());
 
             // 自動起動のときはトレイに常駐するだけにする（Deck モードに入る場合はそこで表示される）
             if !std::env::args().any(|a| a == AUTOSTART_ARG) {
@@ -543,9 +589,7 @@ pub fn run() {
                 }
             }
 
-            if let Err(e) = plugins::init(app.handle(), app.path().app_config_dir()?.join("plugins")) {
-                eprintln!("プラグインホストを開始できません: {e}");
-            }
+            plugins::init(app.handle(), app.path().app_config_dir()?.join("plugins"));
 
             build_tray(app)?;
             spawn_monitor_watcher(app.handle().clone());
@@ -574,6 +618,8 @@ pub fn run() {
             save_deck,
             run_action,
             set_shortcuts,
+            take_startup_warning,
+            suspend_shortcuts,
             list_plugins,
             plugin_get_options,
             set_plugin_buttons,

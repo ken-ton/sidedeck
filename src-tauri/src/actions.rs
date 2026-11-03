@@ -97,7 +97,8 @@ pub(crate) fn launch(app: &tauri::AppHandle, target: &str, args: &str) -> Result
     if path.extension().is_some_and(|x| x.eq_ignore_ascii_case("exe")) {
         let mut cmd = Command::new(path);
         cmd.args(split_args(args));
-        if let Some(dir) = path.parent() {
+        // "notepad.exe" のようにパスがないと parent() は空文字になり、current_dir("") だと起動に失敗する
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
             cmd.current_dir(dir);
         }
         return cmd.spawn().map(|_| ()).map_err(|e| format!("起動できませんでした: {e}"));

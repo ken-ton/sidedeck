@@ -1,8 +1,8 @@
 use serde::Serialize;
 use windows::Win32::Foundation::{ERROR_SUCCESS, HLOCAL, LocalFree};
 use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
-use windows::Win32::Media::Audio::{IMMDeviceEnumerator, MMDeviceEnumerator, eConsole, eRender};
-use windows::Win32::System::Com::{CLSCTX_ALL, COINIT_MULTITHREADED, CoCreateInstance, CoInitializeEx};
+use windows::Win32::Media::Audio::{eConsole, eRender};
+use windows::Win32::System::Com::CLSCTX_ALL;
 use windows::Win32::System::Power::*;
 use windows::core::GUID;
 
@@ -13,11 +13,8 @@ pub struct Volume {
 }
 
 fn endpoint() -> Result<IAudioEndpointVolume, String> {
+    let en = crate::audio::enumerator()?;
     unsafe {
-        // 既に初期化済み（S_FALSE / RPC_E_CHANGED_MODE）でも続行できる。
-        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-        let en: IMMDeviceEnumerator =
-            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(|e| e.to_string())?;
         let dev = en.GetDefaultAudioEndpoint(eRender, eConsole).map_err(|e| e.to_string())?;
         dev.Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None).map_err(|e| e.to_string())
     }
