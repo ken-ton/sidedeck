@@ -25,7 +25,8 @@ export type Action =
   /** repeat が 0 なら停止されるまで繰り返す */
   | { type: "macro"; steps: MacroStep[]; repeat: number }
   /** app は小文字のプロセス名、monitor はモニターのデバイスパス */
-  | { type: "window"; command: WindowCommand; app: string; launch: string; monitor: string };
+  | { type: "window"; command: WindowCommand; app: string; launch: string; monitor: string }
+  | { type: "plugin"; pluginId: string; actionId: string; settings: Record<string, unknown> };
 
 export type ActionType = Action["type"];
 
@@ -79,6 +80,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   system_panel: "システムパネル",
   macro: "マクロ",
   window: "ウィンドウ操作",
+  plugin: "プラグイン",
 };
 
 export const WINDOW_LABELS: Record<WindowCommand, string> = {
@@ -121,6 +123,8 @@ export function emptyAction(type: ActionType): Action {
       return { type, steps: [], repeat: 1 };
     case "window":
       return windowAction("move_next");
+    case "plugin":
+      return { type, pluginId: "", actionId: "", settings: {} };
     default:
       return { type } as Action;
   }

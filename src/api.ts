@@ -27,6 +27,26 @@ export type Volume = { level: number; muted: boolean };
 export type Brightness = { method: "ddc" | "gamma"; value: number; min: number };
 export type DisplayMode = { width: number; height: number; refresh: number };
 export type WindowApp = { name: string; title: string };
+export type PluginField = {
+  key: string;
+  label: string;
+  type: "text" | "number" | "checkbox" | "select";
+  default?: unknown;
+  options?: PluginOption[];
+  optionsFrom?: string;
+  dependsOn?: string[];
+};
+export type PluginOption = { value: string | number; label: string; group?: string };
+export type PluginActionDef = { id: string; name: string; description?: string; fields?: PluginField[] };
+export type PluginInfo = {
+  id: string;
+  name: string;
+  version: string;
+  status: "starting" | "running" | "stopped" | "error";
+  error: string | null;
+  actions: PluginActionDef[];
+};
+export type PluginButtonState = { context: string; title?: string | null; icon?: string | null; sub?: string | null; state?: "normal" | "active" | "alert" | null };
 export type PowerPlan = { id: string; name: string; active: boolean };
 
 export const api = {
@@ -47,6 +67,13 @@ export const api = {
   runAction: (action: Action, buttonId?: string) => invoke<string | null>("run_action", { action, buttonId }),
   setShortcuts: (entries: { id: string; keys: string[] }[]) => invoke<{ id: string; error: string | null }[]>("set_shortcuts", { entries }),
   checkShortcut: (keys: string[]) => invoke<string | null>("check_shortcut", { keys }),
+  listPlugins: () => invoke<PluginInfo[]>("list_plugins"),
+  pluginGetOptions: (pluginId: string, source: string, settings: Record<string, unknown>) =>
+    invoke<PluginOption[]>("plugin_get_options", { pluginId, source, settings }),
+  setPluginButtons: (buttons: { pluginId: string; context: string; action: string; settings: Record<string, unknown> }[]) =>
+    invoke<void>("set_plugin_buttons", { buttons }),
+  reloadPlugins: () => invoke<void>("reload_plugins"),
+  openPluginsFolder: () => invoke<void>("open_plugins_folder"),
   startKeyRecording: () => invoke<void>("start_key_recording"),
   stopKeyRecording: (keepTiming: boolean) => invoke<MacroStep[]>("stop_key_recording", { keepTiming }),
   getStates: () => invoke<States>("get_states"),

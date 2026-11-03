@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, AudioDevice, DeckStatus, States, WindowApp } from "./api";
+import { api, AudioDevice, DeckStatus, PluginButtonState, States, WindowApp } from "./api";
 import { cloneButton, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, runsInBackend, shortcutEntries, shortcutUser, TOGGLE_SHORTCUT_ID, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
@@ -138,6 +138,8 @@ export default function App() {
   const [shortcutErrors, setShortcutErrors] = useState<Record<string, string>>({});
   /** ショートカットのイベントから、最新の deck で実行するため */
   const runShortcut = useRef<(id: string) => void>(() => {});
+  /** プラグインが setState で送ってきた見た目（ボタンの id → 状態） */
+  const [pluginStates, setPluginStates] = useState<Record<string, PluginButtonState>>({});
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -172,6 +174,17 @@ export default function App() {
         if (error) showToast(`マクロが止まりました: ${error}`);
       }),
       listen<string>("shortcut", (e) => runShortcut.current(e.payload)),
+      listen<PluginButtonState>("plugin-state", (e) => {
+        const { context, ...patch } = e.payload;
+        setPluginStates((prev) => ({ ...prev, [context]: { ...prev[context], ...patch, context } }));
+      }),
+      listen<{ context: string; message: string }>("plugin-alert", (e) => {
+        showToast(e.payload.message);
+        if (e.payload.context) {
+          setFlash({ id: e.payload.context, ok: false });
+          window.setTimeout(() => setFlash(null), 350);
+        }
+      }),
     ];
     return () => un.forEach((p) => p.then((f) => f()));
   }, [showToast]);
@@ -205,6 +218,18 @@ export default function App() {
     // ショートカットの中身が変わったときだけ登録し直す
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entriesKey]);
+
+  const pluginButtonsKey = JSON.stringify(
+    deck?.pages.flatMap((p) =>
+      p.buttons.flatMap((b) =>
+        b.action.type === "plugin" ? [{ pluginId: b.action.pluginId, context: b.id, action: b.action.actionId, settings: b.action.settings }] : [],
+      ),
+    ) ?? null,
+  );
+  useEffect(() => {
+    const buttons = JSON.parse(pluginButtonsKey);
+    if (buttons) api.setPluginButtons(buttons);
+  }, [pluginButtonsKey]);
 
   // 通常時はフォーカスを奪わないようにし、編集中だけキーボード入力を受け付ける
   useEffect(() => {
@@ -349,6 +374,7 @@ export default function App() {
   const subFor = (b: DeckButton) => {
     const a = b.action;
     if (editing && shortcutErrors[b.id]) return "⚠ ショートカット";
+    if (pluginStates[b.id]?.sub) return pluginStates[b.id].sub;
     if (a.type === "mic_mute" && states.micMuted) return "ミュート中";
     if (a.type === "audio_device" && a.deviceIds.length !== 1) return outputs.find((d) => d.id === states.defaultOutput)?.name ?? null;
     if (a.type === "page") return "📁";
@@ -363,6 +389,8 @@ export default function App() {
     if (flash?.id === b.id) c.push(flash.ok ? "fired" : "failed");
     if (moving === b.id) c.push("moving");
     if (runningMacros.has(b.id)) c.push("running");
+    if (pluginStates[b.id]?.state === "active") c.push("active");
+    if (pluginStates[b.id]?.state === "alert") c.push("alert");
     return c.join(" ");
   };
 
@@ -439,7 +467,7 @@ export default function App() {
           }
           return (
             <button key={b.id} className={classFor(b)} style={b.color ? { background: b.color } : undefined} onClick={() => tapSlot(slot, b)}>
-              <ButtonFace button={b} sub={subFor(b)} />
+              <ButtonFace button={b} sub={subFor(b)} override={b.action.type === "plugin" ? pluginStates[b.id] : undefined} />
             </button>
           );
         })}

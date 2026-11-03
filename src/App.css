@@ -747,3 +747,51 @@ button.danger-fill {
   padding: 0 8px 0 0;
   min-width: 120px;
 }
+
+.plugin-group h2 {
+  margin-top: 10px;
+}
+.picker-current {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  text-align: left;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  margin-bottom: 8px;
+}
+.picker-current small {
+  color: var(--muted);
+}
+.plugin-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 10px;
+}
+.plugin-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.plugin-list small {
+  color: var(--muted);
+}
+.badge {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--bg-3);
+}
+.badge.status-running {
+  background: color-mix(in srgb, var(--ok) 35%, transparent);
+}
+.badge.status-error {
+  background: color-mix(in srgb, var(--danger) 40%, transparent);
+}

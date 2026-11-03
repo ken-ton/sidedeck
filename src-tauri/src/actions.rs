@@ -28,6 +28,14 @@ pub enum Action {
         #[serde(default = "one")]
         repeat: u32,
     },
+    Plugin {
+        #[serde(rename = "pluginId")]
+        plugin_id: String,
+        #[serde(rename = "actionId")]
+        action_id: String,
+        #[serde(default)]
+        settings: serde_json::Value,
+    },
     /// command: focus / move_next / move_to / maximize / minimize
     Window {
         command: String,
@@ -122,6 +130,9 @@ pub fn run(app: &tauri::AppHandle, action: Action, button_id: Option<String>) ->
         Action::Macro { steps, repeat } => {
             let id = button_id.ok_or("マクロの識別子がありません")?;
             Ok(crate::macros::toggle(app, id, steps, repeat))
+        }
+        Action::Plugin { plugin_id, action_id, settings } => {
+            crate::plugins::key_down(app, &plugin_id, &action_id, button_id.as_deref().unwrap_or_default(), settings).map(|_| None)
         }
         Action::Window { command, app: name, launch, monitor } => match command.as_str() {
             "focus" => crate::winops::focus_app(app, &name, &launch),

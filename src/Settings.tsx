@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, Config, DeckStatus, MonitorInfo } from "./api";
+import { api, Config, DeckStatus, MonitorInfo, PluginInfo } from "./api";
 import { DEFAULT_TOGGLE_SHORTCUT, type DeckData } from "./deck";
 import ShortcutField from "./ShortcutField";
 
@@ -21,6 +21,7 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [autostart, setAutostart] = useState<{ enabled: boolean; devBuild: boolean } | null>(null);
 
   const reload = useCallback(async () => {
@@ -31,9 +32,11 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
 
   useEffect(() => {
     reload();
-    const un = listen("monitors-changed", reload);
+    const loadPlugins = () => api.listPlugins().then(setPlugins);
+    loadPlugins();
+    const un = [listen("monitors-changed", reload), listen("plugins-changed", loadPlugins)];
     return () => {
-      un.then((f) => f());
+      un.forEach((p) => p.then((f) => f()));
     };
   }, [reload]);
 
@@ -188,6 +191,29 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
           <button className="action secondary" onClick={() => api.openTouchSetup().catch((e) => onError(String(e)))}>
             タッチ画面のセットアップを開く
           </button>
+        </section>
+
+        <section>
+          <h2>プラグイン</h2>
+          {plugins.length === 0 && <p className="hint">プラグインは入っていません。</p>}
+          <ul className="plugin-list">
+            {plugins.map((p) => (
+              <li key={p.id}>
+                <div>
+                  <strong>{p.name}</strong> <small>{p.version}</small>
+                  {p.error && <p className="hint warn">{p.error}</p>}
+                </div>
+                <span className={`badge status-${p.status}`}>
+                  {{ running: "動作中", starting: "起動中", stopped: "停止中", error: "エラー" }[p.status]}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <div className="chips wrap">
+            <button onClick={() => api.reloadPlugins()}>プラグインを再読み込み</button>
+            <button onClick={() => api.openPluginsFolder().catch((e) => onError(String(e)))}>フォルダを開く</button>
+          </div>
+          <p className="hint">プラグインは、フォルダごと「フォルダを開く」の場所に置いてから再読み込みします。プラグインはパソコン上で自由に動けるプログラムなので、信頼できるものだけを入れてください。</p>
         </section>
 
         <section>

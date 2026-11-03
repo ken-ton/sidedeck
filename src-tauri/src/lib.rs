@@ -7,6 +7,7 @@ mod games;
 mod icons;
 mod input;
 mod macros;
+mod plugins;
 mod shortcuts;
 mod system;
 mod winops;
@@ -313,6 +314,34 @@ async fn set_autostart(app: AppHandle, enabled: bool) -> CmdResult<()> {
 }
 
 #[tauri::command]
+async fn list_plugins(app: AppHandle) -> Vec<plugins::PluginInfo> {
+    plugins::list(&app)
+}
+
+#[tauri::command]
+async fn plugin_get_options(app: AppHandle, plugin_id: String, source: String, settings: serde_json::Value) -> CmdResult<serde_json::Value> {
+    let v = plugins::request(&app, &plugin_id, serde_json::json!({ "event": "getOptions", "source": source, "settings": settings })).await?;
+    Ok(v["options"].clone())
+}
+
+#[tauri::command]
+async fn set_plugin_buttons(app: AppHandle, buttons: Vec<plugins::PluginButton>) {
+    plugins::set_buttons(&app, buttons);
+}
+
+#[tauri::command]
+async fn reload_plugins(app: AppHandle) {
+    plugins::reload(&app);
+}
+
+#[tauri::command]
+async fn open_plugins_folder(app: AppHandle) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = plugins::dir(&app);
+    app.opener().open_path(dir.to_string_lossy(), None::<&str>).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 async fn get_states() -> States {
     States { mic_muted: audio::mic_muted(), default_output: audio::default_output_id() }
 }
@@ -514,6 +543,10 @@ pub fn run() {
                 }
             }
 
+            if let Err(e) = plugins::init(app.handle(), app.path().app_config_dir()?.join("plugins")) {
+                eprintln!("プラグインホストを開始できません: {e}");
+            }
+
             build_tray(app)?;
             spawn_monitor_watcher(app.handle().clone());
             foreground::spawn_watcher(app.handle().clone());
@@ -541,6 +574,11 @@ pub fn run() {
             save_deck,
             run_action,
             set_shortcuts,
+            list_plugins,
+            plugin_get_options,
+            set_plugin_buttons,
+            reload_plugins,
+            open_plugins_folder,
             get_autostart,
             set_autostart,
             check_shortcut,

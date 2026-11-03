@@ -1,0 +1,29 @@
+{
+  "id": "com.kenton.windeck.counter",
+  "name": "カウンター（サンプル）",
+  "version": "1.0.0",
+  "command": "node",
+  "args": ["index.mjs"],
+  "actions": [
+    {
+      "id": "count",
+      "name": "数える",
+      "description": "押すたびにボタンの表示が増えます。プラグインの仕組みの動作確認用です。",
+      "fields": [
+        { "key": "step", "label": "増やす数", "type": "number", "default": 1 },
+        { "key": "down", "label": "減らす", "type": "checkbox" },
+        {
+          "key": "color",
+          "label": "色",
+          "type": "select",
+          "default": "blue",
+          "options": [
+            { "value": "blue", "label": "青" },
+            { "value": "red", "label": "赤" }
+          ]
+        },
+        { "key": "fruit", "label": "果物（プラグインに問い合わせる選択肢）", "type": "select", "optionsFrom": "fruits", "dependsOn": ["color"] }
+      ]
+    }
+  ]
+}

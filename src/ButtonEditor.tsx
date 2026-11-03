@@ -21,6 +21,7 @@ import ButtonFace from "./ButtonFace";
 import MacroFields from "./MacroFields";
 import WindowFields from "./WindowFields";
 import ShortcutField from "./ShortcutField";
+import PluginFields from "./PluginFields";
 
 /** 新しいフォルダを作るときの仮の pageId */
 const NEW_FOLDER = "__new__";
@@ -189,6 +190,8 @@ function AudioDeviceFields({ action, onChange }: { action: Extract<Action, { typ
 export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, onMove, onDuplicate, onCopy, shortcutError, shortcutUserOf, onClose, onError }: Props) {
   const [b, setB] = useState<DeckButton>(initial);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  /** 自動で入れた名前。ユーザーが書き換えていなければ、次の候補で置き換える */
+  const suggested = useRef<string | null>(null);
   const setAction = (action: Action) => setB((x) => ({ ...x, action }));
   const folders = deck.pages.filter((p) => p.folder);
 
@@ -208,6 +211,7 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
     if (a.type === "launch" && !a.target.trim()) return onError("開くものを指定してください");
     if (a.type === "hotkey" && !a.keys.some((k) => !(MODIFIERS as readonly string[]).includes(k))) return onError("キーを指定してください");
     if (a.type === "text" && !a.text) return onError("入力する文字を指定してください");
+    if (a.type === "plugin" && (!a.pluginId || !a.actionId)) return onError("プラグインの操作を選んでください");
     if (a.type === "window" && a.command === "focus" && !a.app) return onError("前面に出すアプリを指定してください");
     if (a.type === "window" && a.command === "move_to" && !a.monitor) return onError("移動先のモニターを選んでください");
     if (a.type === "macro" && a.steps.length === 0) return onError("ステップを 1 つ以上追加してください");
@@ -337,6 +341,19 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
             </div>
           )}
           {b.action.type === "window" && <WindowFields action={b.action} onChange={setAction} />}
+          {b.action.type === "plugin" && (
+            <PluginFields
+              action={b.action}
+              onChange={setAction}
+              onSuggestLabel={(label) =>
+                setB((x) => {
+                  if (x.label && x.label !== suggested.current) return x;
+                  suggested.current = label;
+                  return { ...x, label };
+                })
+              }
+            />
+          )}
           {b.action.type === "macro" && <MacroFields action={b.action} onChange={setAction} onError={onError} />}
           {b.action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
         </section>
