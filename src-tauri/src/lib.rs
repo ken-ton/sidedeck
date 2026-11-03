@@ -282,6 +282,29 @@ async fn check_shortcut(app: AppHandle, keys: Vec<String>) -> Option<String> {
     shortcuts::check(&app, &keys)
 }
 
+const AUTOSTART_ARG: &str = "--autostart";
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Autostart {
+    enabled: bool,
+    /// 開発版では実行ファイルが target/debug にあるので、登録しても意味がない
+    dev_build: bool,
+}
+
+#[tauri::command]
+async fn get_autostart(app: AppHandle) -> Autostart {
+    use tauri_plugin_autostart::ManagerExt;
+    Autostart { enabled: app.autolaunch().is_enabled().unwrap_or(false), dev_build: cfg!(debug_assertions) }
+}
+
+#[tauri::command]
+async fn set_autostart(app: AppHandle, enabled: bool) -> CmdResult<()> {
+    use tauri_plugin_autostart::ManagerExt;
+    let a = app.autolaunch();
+    if enabled { a.enable() } else { a.disable() }.map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 async fn get_states() -> States {
     States { mic_muted: audio::mic_muted(), default_output: audio::default_output_id() }
@@ -452,6 +475,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(shortcuts::plugin())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![AUTOSTART_ARG]),
+        ))
         .setup(|app| {
             let config_path = app.path().app_config_dir()?.join("config.json");
             let mut config = Config::load(&config_path);
@@ -472,6 +499,13 @@ pub fn run() {
 
             app.manage(foreground::LastForeground::default());
             app.manage(shortcuts::Registered::default());
+
+            // 自動起動のときはトレイに常駐するだけにする（Deck モードに入る場合はそこで表示される）
+            if !std::env::args().any(|a| a == AUTOSTART_ARG) {
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.show();
+                }
+            }
 
             build_tray(app)?;
             spawn_monitor_watcher(app.handle().clone());
@@ -500,6 +534,8 @@ pub fn run() {
             save_deck,
             run_action,
             set_shortcuts,
+            get_autostart,
+            set_autostart,
             check_shortcut,
             start_key_recording,
             stop_key_recording,

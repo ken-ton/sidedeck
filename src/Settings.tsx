@@ -21,10 +21,12 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [autostart, setAutostart] = useState<{ enabled: boolean; devBuild: boolean } | null>(null);
 
   const reload = useCallback(async () => {
     setMonitors(await api.listMonitors());
     setConfig(await api.getConfig());
+    setAutostart(await api.getAutostart());
   }, []);
 
   useEffect(() => {
@@ -108,6 +110,28 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
                   }}
                 />
               </label>
+              {autostart && (
+                <>
+                  <label className="switch-row">
+                    <span>Windows の起動時に自動で起動する</span>
+                    <input
+                      type="checkbox"
+                      className="switch"
+                      checked={autostart.enabled}
+                      onChange={async (e) => {
+                        await api.setAutostart(e.target.checked).catch((err) => onError(String(err)));
+                        reload();
+                      }}
+                    />
+                  </label>
+                  <p className="hint">
+                    自動で起動したときは、トレイに常駐した状態で始まります。上の自動切替もオンにしておくと、PC を起動するだけで Deck 用モニターにデッキが表示されます。
+                  </p>
+                  {autostart.devBuild && (
+                    <p className="hint warn">いまは開発版で動いています。開発版の実行ファイルが登録されてしまうので、インストールした版で設定してください。</p>
+                  )}
+                </>
+              )}
             </section>
           </>
         )}
