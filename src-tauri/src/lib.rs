@@ -284,13 +284,17 @@ async fn launch_game(app: AppHandle, id: String) -> CmdResult<()> {
         .into_iter()
         .find(|g| g.id == id)
         .ok_or("ゲームが見つかりません")?;
-    games::launch(&app, &game)?;
     let st = app.state::<AppState>();
     let active = st.deck.lock().unwrap().active;
+    // 起動前のウィンドウを記録するため、起動より先に監視を始める
     if active && st.config.lock().unwrap().move_game_windows {
         if let Ok(mon) = st.deck_monitor() {
-            window_mover::follow_launch(mon.gdi_name, Duration::from_secs(120));
+            window_mover::follow_launch(mon.gdi_name, Duration::from_secs(120), game.source == "steam");
         }
+    }
+    if let Err(e) = games::launch(&app, &game) {
+        window_mover::cancel();
+        return Err(e);
     }
     if active {
         // ゲームが前面に出るようにランチャーを隠す（クイックボタンは残る）
@@ -577,6 +581,9 @@ mod smoke {
             println!("power: {} {} active={}", p.id, p.name, p.active);
         }
         println!("volume ok = {}", crate::system::get_volume().is_ok());
+        println!("big picture monitor = {:?}", crate::window_mover::big_picture_monitor());
+        let prim = crate::display::list_monitors().into_iter().find(|m| m.primary).unwrap();
+        println!("primary hmonitor  = {:?}", crate::display::hmonitor_for(&prim.gdi_name));
         for g in crate::games::list_games(&[]) {
             println!("game: {} {} art={}", g.id, g.title, g.art.is_some());
         }

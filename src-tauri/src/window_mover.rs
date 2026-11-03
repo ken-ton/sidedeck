@@ -12,7 +12,7 @@ use windows::Win32::Foundation::*;
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::Threading::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
-use windows::core::PWSTR;
+use windows::core::{BOOL, PWSTR};
 
 /// 新しい起動があったら古い監視を止めるための世代番号
 static GENERATION: AtomicU64 = AtomicU64::new(0);
@@ -52,14 +52,15 @@ fn monitor_rect(h: HMONITOR) -> Option<RECT> {
 }
 
 /// 前面ウィンドウを 1 つ調べ、必要なら Deck モニターへ移す。処理済みなら true。
-unsafe fn try_move(hwnd: HWND, deck: HMONITOR, target: RECT, me: u32) -> bool {
+unsafe fn try_move(hwnd: HWND, deck: HMONITOR, target: RECT, me: u32, existing: &HashSet<u32>) -> bool {
     unsafe {
         if !IsWindowVisible(hwnd).as_bool() || IsIconic(hwnd).as_bool() {
             return false;
         }
         let mut pid = 0u32;
         GetWindowThreadProcessId(hwnd, Some(&mut pid));
-        if pid == 0 || pid == me {
+        // 起動前からウィンドウを持っていたプロセス（ターミナルやブラウザなど）は動かさない
+        if pid == 0 || pid == me || existing.contains(&pid) {
             return false;
         }
         // 管理者権限のプロセスなどは名前も取れず、移動もできないので諦める
@@ -69,6 +70,7 @@ unsafe fn try_move(hwnd: HWND, deck: HMONITOR, target: RECT, me: u32) -> bool {
         }
         let mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
         if mon == deck {
+            eprintln!("[window_mover] {name}: 既に移動先モニター上にあるので移動しない");
             return true;
         }
         let Some(src) = monitor_rect(mon) else { return false };
@@ -95,7 +97,11 @@ unsafe fn try_move(hwnd: HWND, deck: HMONITOR, target: RECT, me: u32) -> bool {
         if zoomed {
             let _ = ShowWindow(hwnd, SW_RESTORE);
         }
-        let _ = SetWindowPos(hwnd, None, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+        let r = SetWindowPos(hwnd, None, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE);
+        eprintln!(
+            "[window_mover] {name}: ({},{} {ww}x{wh}) → ({x},{y} {w}x{h}) 全画面={covers_monitor} 結果={r:?}",
+            wr.left, wr.top
+        );
         if zoomed {
             let _ = ShowWindow(hwnd, SW_MAXIMIZE);
         }
@@ -103,12 +109,72 @@ unsafe fn try_move(hwnd: HWND, deck: HMONITOR, target: RECT, me: u32) -> bool {
     }
 }
 
-/// ゲーム起動直後に呼ぶ。`duration` の間、新しく前面に出たウィンドウを Deck モニターへ移す。
-pub fn follow_launch(deck_gdi: String, duration: Duration) {
+/// Steam の Big Picture モードのウィンドウが表示されていれば、そのモニターを返す。
+pub(crate) fn big_picture_monitor() -> Option<HMONITOR> {
+    unsafe extern "system" fn cb(h: HWND, data: LPARAM) -> BOOL {
+        unsafe {
+            if IsWindowVisible(h).as_bool() && !IsIconic(h).as_bool() {
+                let mut buf = [0u16; 256];
+                let n = GetWindowTextW(h, &mut buf).max(0) as usize;
+                // タイトルは言語によって「Steam Big Pictureモード」「Steam Big Picture Mode」など
+                if String::from_utf16_lossy(&buf[..n]).contains("Big Picture") {
+                    let mut pid = 0u32;
+                    GetWindowThreadProcessId(h, Some(&mut pid));
+                    if process_name(pid).as_deref() == Some("steamwebhelper.exe") {
+                        *(data.0 as *mut Option<HWND>) = Some(h);
+                        return BOOL(0); // 見つかったので列挙を止める
+                    }
+                }
+            }
+            BOOL(1)
+        }
+    }
+    let mut found: Option<HWND> = None;
+    unsafe {
+        let _ = EnumWindows(Some(cb), LPARAM(&mut found as *mut _ as isize));
+        found.map(|h| MonitorFromWindow(h, MONITOR_DEFAULTTONEAREST))
+    }
+}
+
+/// 表示中のトップレベルウィンドウを持つプロセスの PID を集める。
+fn processes_with_windows() -> HashSet<u32> {
+    unsafe extern "system" fn cb(h: HWND, data: LPARAM) -> BOOL {
+        unsafe {
+            if IsWindowVisible(h).as_bool() {
+                let mut pid = 0u32;
+                GetWindowThreadProcessId(h, Some(&mut pid));
+                (*(data.0 as *mut HashSet<u32>)).insert(pid);
+            }
+            BOOL(1)
+        }
+    }
+    let mut set = HashSet::new();
+    unsafe {
+        let _ = EnumWindows(Some(cb), LPARAM(&mut set as *mut _ as isize));
+    }
+    set
+}
+
+/// ゲーム起動直後に呼ぶ。`duration` の間、新しく前面に出たウィンドウを移動先モニターへ移す。
+///
+/// 移動先は通常 Deck モニター。ただし `prefer_big_picture` が true で
+/// Steam の Big Picture モードが開いていれば、Big Picture があるモニターにする。
+pub fn follow_launch(deck_gdi: String, duration: Duration, prefer_big_picture: bool) {
     let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
+    // 起動前の状態を記録する（呼び出し元はゲームを起動した直後なので、ここで取れば十分早い）
+    let existing = processes_with_windows();
     std::thread::spawn(move || {
-        let Some(deck) = crate::display::hmonitor_for(&deck_gdi) else { return };
+        let bp = if prefer_big_picture { big_picture_monitor() } else { None };
+        let Some(deck) = bp.or_else(|| crate::display::hmonitor_for(&deck_gdi)) else { return };
         let Some(target) = monitor_rect(deck) else { return };
+        eprintln!(
+            "[window_mover] 監視開始: BigPicture={} 移動先=({},{} {}x{})",
+            if bp.is_some() { "あり" } else if prefer_big_picture { "なし" } else { "対象外" },
+            target.left,
+            target.top,
+            target.right - target.left,
+            target.bottom - target.top
+        );
         let me = std::process::id();
         let mut done: HashSet<isize> = HashSet::new();
         let start = Instant::now();
@@ -119,7 +185,7 @@ pub fn follow_launch(deck_gdi: String, duration: Duration) {
             if hwnd.is_invalid() || done.contains(&key) {
                 continue;
             }
-            if unsafe { try_move(hwnd, deck, target, me) } {
+            if unsafe { try_move(hwnd, deck, target, me, &existing) } {
                 done.insert(key);
             }
         }
@@ -130,3 +196,4 @@ pub fn follow_launch(deck_gdi: String, duration: Duration) {
 pub fn cancel() {
     GENERATION.fetch_add(1, Ordering::SeqCst);
 }
+
