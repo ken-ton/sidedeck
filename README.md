@@ -94,6 +94,10 @@ npm run tauri build   # インストーラーを作成（src-tauri/target/releas
 
 開発版とインストール版は同時には起動できません（後から起動した方は、先に起動している方のウィンドウを開くだけになります）。
 
+### アイコン
+
+アイコンの元画像は `assets/icon.svg` です。1024px の PNG に書き出してから、`npm run tauri icon <PNG のパス>` で `src-tauri/icons/` の各サイズを作り直します（Android / iOS 用に作られたフォルダは使わないので削除します）。
+
 ### テスト
 
 ```sh
