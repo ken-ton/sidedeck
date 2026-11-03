@@ -34,7 +34,6 @@ export default function Settings({ deck, status, onDeckChange, onResetDeck, onEr
 
   const toggleDeck = () => (status.active ? api.deckExit() : api.deckEnter()).catch((e) => onError(String(e)));
 
-  // グリッドを小さくしたときに、はみ出すボタンがあるか
   const resize = (columns: number, rows: number) => {
     const max = columns * rows;
     const lost = deck.pages.reduce((n, p) => n + p.buttons.filter((b) => b.slot >= max).length, 0);

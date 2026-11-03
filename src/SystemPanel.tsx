@@ -3,7 +3,6 @@ import { api, Brightness, DisplayMode, PowerPlan, throttle, Volume } from "./api
 
 const modeKey = (m: DisplayMode) => `${m.width}x${m.height}@${m.refresh}`;
 
-/** 音量・明るさ・解像度・電源プランをまとめたパネル（旧クイック設定） */
 export default function SystemPanel({ onClose }: { onClose: () => void }) {
   const [volume, setVolume] = useState<Volume | null>(null);
   const [bright, setBright] = useState<Brightness | null>(null);
@@ -22,7 +21,6 @@ export default function SystemPanel({ onClose }: { onClose: () => void }) {
   const sendVolume = useMemo(() => throttle((v: number) => api.setVolume(v), 60), []);
   const sendBright = useMemo(() => throttle((v: number) => api.setBrightness(v).catch((e) => setError(String(e))), 150), []);
 
-  // 同じ解像度の中でリフレッシュレート違いを並べる
   const resolutions = useMemo(() => {
     if (!modes) return [];
     const seen = new Set<string>();

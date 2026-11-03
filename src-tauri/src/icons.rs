@@ -1,5 +1,3 @@
-//! ボタン用のアイコン画像を data URL で取得する。
-
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use windows::Win32::Foundation::SIZE;
@@ -25,7 +23,6 @@ fn file_data_url(path: &str) -> Option<String> {
     Some(format!("data:{mime};base64,{}", STANDARD.encode(bytes)))
 }
 
-/// 起動対象（パス / URL / 画像ファイル）からアイコンを取得する。
 pub fn icon_for(target: &str) -> Option<String> {
     let target = target.trim().trim_matches('"');
     if let Some(url) = file_data_url(target) {
@@ -42,7 +39,6 @@ pub fn icon_for(target: &str) -> Option<String> {
     shell_icon(target, 128)
 }
 
-/// Explorer と同じ方法（IShellItemImageFactory）でファイルのアイコンを取得し、PNG にする。
 fn shell_icon(path: &str, size: i32) -> Option<String> {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);

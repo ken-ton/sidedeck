@@ -16,7 +16,6 @@ function Clock() {
   return <span className="clock">{now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span>;
 }
 
-/** ページに自動切替のアプリを登録する欄 */
 function AppsField({ apps, onChange, lastApp }: { apps: string[]; onChange: (apps: string[]) => void; lastApp: WindowApp | null }) {
   const [running, setRunning] = useState<WindowApp[] | null>(null);
   const [manual, setManual] = useState("");
@@ -119,7 +118,7 @@ function PageEditor({ page, canDelete, lastApp, onSave, onDelete, onClose }: {
 
 export default function App() {
   const [deck, setDeck] = useState<DeckData | null>(null);
-  /** 表示中のページの履歴（最後が今のページ）。フォルダを開くと積まれる。 */
+  /** 最後が今のページ。フォルダを開くと積まれる。 */
   const [stack, setStack] = useState<string[]>([]);
   const [editing, setEditing] = useState(false);
   const [editor, setEditor] = useState<{ button: DeckButton; isNew: boolean } | null>(null);
@@ -132,9 +131,7 @@ export default function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ id: string; ok: boolean } | null>(null);
   const [runningMacros, setRunningMacros] = useState<Set<string>>(new Set());
-  /** 最後に前面にあったアプリ（win-deck 自身は含まない） */
   const [foreground, setForeground] = useState<WindowApp | null>(null);
-  /** 自動切替中なら、切替先のページと、戻り先のページ履歴 */
   const autoSwitched = useRef<{ page: string; returnTo: string[] } | null>(null);
 
   const showToast = useCallback((msg: string) => {
@@ -147,7 +144,6 @@ export default function App() {
     api.saveDeck(next).catch((e) => showToast(`保存できませんでした: ${e}`));
   }, [showToast]);
 
-  // ---- 読み込みと状態の監視
   useEffect(() => {
     api.getDeck().then((saved) => {
       const d = saved?.version === 1 && saved.pages?.length ? saved : defaultDeck();
@@ -189,7 +185,7 @@ export default function App() {
     return () => clearInterval(t);
   }, [hasAudioButtons]);
 
-  // 編集中だけキーボード入力を受け付ける（通常時はフォーカスを奪わない）
+  // 通常時はフォーカスを奪わないようにし、編集中だけキーボード入力を受け付ける
   useEffect(() => {
     api.setFocusable(editing);
     if (!editing) setMoving(null);
@@ -202,7 +198,6 @@ export default function App() {
     return deck.pages.find((p) => p.id === id) ?? roots[0] ?? null;
   }, [deck, stack, roots]);
 
-  // 前面のアプリが変わったら、登録されたページに自動で切り替える
   useEffect(() => {
     if (!deck || !foreground || editing || deck.autoSwitch === false) return;
     const current = stack.length ? stack : roots[0] ? [roots[0].id] : [];
@@ -220,7 +215,7 @@ export default function App() {
       if (auto.page === currentId) setStack(auto.returnTo);
       autoSwitched.current = null;
     }
-    // 前面のアプリが変わったときだけ判定する
+    // 前面のアプリが変わったときだけ判定する（ページ移動では再判定しない）
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [foreground]);
 
@@ -229,7 +224,6 @@ export default function App() {
   const updatePage = (pageId: string, fn: (p: Page) => Page, extra: (d: DeckData) => DeckData = (d) => d) =>
     commit(extra({ ...deck, pages: deck.pages.map((p) => (p.id === pageId ? fn(p) : p)) }));
 
-  // ---- ボタンの操作
   const run = async (b: DeckButton) => {
     const a = b.action;
     if (a.type === "page") {
@@ -290,7 +284,6 @@ export default function App() {
     setEditor(null);
   };
 
-  // ---- ページ
   const addPage = () => {
     const p: Page = { id: uid(), name: `ページ ${roots.length + 1}`, folder: false, buttons: [] };
     commit({ ...deck, pages: [...deck.pages, p] });
@@ -302,7 +295,6 @@ export default function App() {
     setStack([p.id]);
   };
 
-  // ---- 表示用の状態
   const subFor = (b: DeckButton) => {
     const a = b.action;
     if (a.type === "mic_mute" && states.micMuted) return "ミュート中";

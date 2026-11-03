@@ -30,7 +30,6 @@ export type WindowApp = { name: string; title: string };
 export type PowerPlan = { id: string; name: string; active: boolean };
 
 export const api = {
-  // 設定
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),
   getConfig: () => invoke<Config>("get_config"),
   setDeckMonitor: (devicePath: string, name: string) => invoke<void>("set_deck_monitor", { devicePath, name }),
@@ -41,7 +40,6 @@ export const api = {
   setFocusable: (focusable: boolean) => invoke<void>("set_focusable", { focusable }),
   openTouchSetup: () => invoke<void>("open_touch_setup"),
 
-  // デッキ
   getDeck: () => invoke<DeckData | null>("get_deck"),
   saveDeck: (deck: DeckData) => invoke<void>("save_deck", { deck }),
   runAction: (action: Action, buttonId?: string) => invoke<string | null>("run_action", { action, buttonId }),
@@ -54,7 +52,6 @@ export const api = {
   getForegroundApp: () => invoke<WindowApp | null>("get_foreground_app"),
   listWindowApps: () => invoke<WindowApp[]>("list_window_apps"),
 
-  // システムパネル
   getVolume: () => invoke<Volume>("get_volume"),
   setVolume: (level: number) => invoke<void>("set_volume", { level }),
   setMute: (muted: boolean) => invoke<void>("set_mute", { muted }),
@@ -66,7 +63,6 @@ export const api = {
   setPowerPlan: (id: string) => invoke<void>("set_power_plan", { id }),
 };
 
-/** 連続したスライダー操作をまとめて送る */
 export function throttle<T extends unknown[]>(fn: (...a: T) => void, ms: number) {
   let last = 0;
   let timer: number | undefined;

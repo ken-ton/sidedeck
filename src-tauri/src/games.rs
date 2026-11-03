@@ -1,5 +1,3 @@
-//! インストール済みの Steam / Epic ゲームを集める（デッキのボタン登録用）。
-
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -11,11 +9,8 @@ use winreg::enums::HKEY_CURRENT_USER;
 pub struct Game {
     pub id: String,
     pub title: String,
-    /// "steam" | "epic"
     pub source: String,
-    /// URL（steam:// / com.epicgames.launcher://）または実行ファイルのパス
     pub launch: String,
-    /// カバー画像のローカルパス
     pub art: Option<String>,
 }
 
@@ -25,7 +20,7 @@ pub fn steam_root() -> Option<PathBuf> {
     Some(PathBuf::from(p.replace('/', "\\")))
 }
 
-/// VDF/ACF の `"key"  "value"` 行だけを拾う簡易パーサー。
+/// `"key"  "value"` の行だけを拾う。ネストは区別しない。
 fn vdf_pairs(text: &str) -> Vec<(String, String)> {
     text.lines()
         .filter_map(|line| {

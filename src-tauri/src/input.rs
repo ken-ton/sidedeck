@@ -1,5 +1,3 @@
-//! キー入力の送信と、フォーカスを奪わないウィンドウ設定。
-
 use std::collections::HashSet;
 use std::sync::{LazyLock, Mutex};
 use std::time::Duration;
@@ -9,7 +7,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
-/// キー名 → 仮想キー。`media` が true のキーはスキャンコードを持たないので VK で送る。
+/// `media` が true のキーはスキャンコードを持たないので VK で送る。
 fn vk_for(name: &str) -> Option<(VIRTUAL_KEY, bool)> {
     let n = name.to_ascii_lowercase();
     let vk = match n.as_str() {
@@ -124,7 +122,6 @@ pub fn key_up(keys: &[String]) -> Result<(), String> {
     send(&inputs)
 }
 
-/// `["ctrl", "shift", "s"]` のような組み合わせを押して離す。
 pub fn send_keys(keys: &[String]) -> Result<(), String> {
     key_down(keys)?;
     // ゲームはフレーム単位で入力を読むので、押している時間を少し取る
@@ -132,7 +129,6 @@ pub fn send_keys(keys: &[String]) -> Result<(), String> {
     key_up(keys)
 }
 
-/// 仮想キーコードを、`vk_for` が受け付けるキー名に戻す（記録用）。
 pub fn name_for_vk(vk: u16) -> Option<String> {
     let v = VIRTUAL_KEY(vk);
     let fixed = match v {
@@ -163,7 +159,7 @@ pub fn name_for_vk(vk: u16) -> Option<String> {
     NAMED.iter().find(|n| vk_for(n).is_some_and(|(x, _)| x == v)).map(|n| n.to_string())
 }
 
-/// 文字列をそのまま入力する（Unicode 入力。ゲームには効かないことが多い）。
+/// Unicode 入力なので、ゲームには効かないことが多い。
 pub fn send_text(text: &str) -> Result<(), String> {
     let mut inputs = Vec::new();
     for unit in text.encode_utf16() {
@@ -183,9 +179,7 @@ pub fn send_text(text: &str) -> Result<(), String> {
     send(&inputs)
 }
 
-/// NOACTIVATE を有効にしているウィンドウ（HWND の値）
 static NOACTIVATE: LazyLock<Mutex<HashSet<isize>>> = LazyLock::new(Default::default);
-/// サブクラス化済みのウィンドウ
 static SUBCLASSED: LazyLock<Mutex<HashSet<isize>>> = LazyLock::new(Default::default);
 
 unsafe extern "system" fn subclass_proc(
@@ -199,7 +193,6 @@ unsafe extern "system" fn subclass_proc(
     unsafe {
         if NOACTIVATE.lock().unwrap().contains(&(hwnd.0 as isize)) {
             match msg {
-                // クリック・タップでアクティブにしない
                 WM_MOUSEACTIVATE => return LRESULT(MA_NOACTIVATE as isize),
                 // Tauri (tao) がウィンドウ表示やサイズ変更のたびに拡張スタイルを書き直すので、
                 // そのたびに WS_EX_NOACTIVATE を付け直す
@@ -214,9 +207,7 @@ unsafe extern "system" fn subclass_proc(
     }
 }
 
-/// クリック・タップしてもアクティブにならないウィンドウにする（WS_EX_NOACTIVATE）。
-/// 前面のアプリやゲームからフォーカスを奪わずにボタンを押せるようになる。
-/// その代わりキーボード入力は受け取れないので、編集時は解除する。
+/// 有効な間はキーボード入力を受け取れないので、編集時は解除する。
 pub fn set_noactivate(win: &tauri::WebviewWindow, on: bool) {
     let Ok(h) = win.hwnd() else { return };
     let key = h.0 as isize;

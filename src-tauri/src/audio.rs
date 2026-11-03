@@ -1,5 +1,3 @@
-//! オーディオ出力デバイスの列挙・切替と、マイクのミュート。
-
 use std::ffi::c_void;
 
 use serde::Serialize;
@@ -68,8 +66,6 @@ pub fn list_outputs() -> Result<Vec<AudioDevice>, String> {
     Ok(out)
 }
 
-/// 既定の出力デバイスを変更する。
-///
 /// 公開 API がないため、Windows の設定アプリも使っている非公開の IPolicyConfig を使う。
 /// Windows 7 以降で広く使われている方法だが、将来の更新で動かなくなる可能性はある。
 pub fn set_default_output(id: &str) -> Result<(), String> {
@@ -102,7 +98,7 @@ pub fn set_default_output(id: &str) -> Result<(), String> {
     }
 }
 
-/// `ids` の中で、今の既定デバイスの次のものに切り替える。`ids` が空なら全デバイスを順番に切り替える。
+/// `ids` が空なら全デバイスを順番に切り替える。
 pub fn cycle_output(ids: &[String]) -> Result<String, String> {
     let all = list_outputs()?;
     let candidates: Vec<&AudioDevice> = if ids.is_empty() {
@@ -137,7 +133,6 @@ pub fn mic_muted() -> Option<bool> {
     unsafe { v.GetMute().ok().map(|b| b.as_bool()) }
 }
 
-/// マイクのミュートを切り替え、切り替え後の状態を返す。
 pub fn toggle_mic() -> Result<bool, String> {
     let v = mic_volume()?;
     unsafe {

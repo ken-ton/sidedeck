@@ -74,16 +74,12 @@ fn emit_status(app: &AppHandle) {
     let _ = app.emit("deck-status", status(app));
 }
 
-// ---------------------------------------------------------------- Deck モード
-
-/// デッキを Deck モニターいっぱいに表示する。プライマリや画面配置は変更しない。
 fn place_main_fullscreen(app: &AppHandle) {
     let (x, y, w, h) = app.state::<AppState>().deck.lock().unwrap().rect;
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.set_decorations(false);
         let _ = win.set_position(PhysicalPosition::new(x, y));
         let _ = win.set_size(PhysicalSize::new(w, h));
-        // タップしても前面のアプリ・ゲームからフォーカスを奪わないようにする
         input::set_noactivate(&win, true);
         let _ = win.show();
     }
@@ -116,7 +112,6 @@ fn exit_deck(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// モニターの抜き差しを監視し、自動で Deck モードに入る／抜ける。
 fn spawn_monitor_watcher(app: AppHandle) {
     std::thread::spawn(move || {
         let mut last: Option<bool> = None;
@@ -144,8 +139,6 @@ fn spawn_monitor_watcher(app: AppHandle) {
         }
     });
 }
-
-// ---------------------------------------------------------------- コマンド: 設定
 
 type CmdResult<T> = Result<T, String>;
 
@@ -202,7 +195,6 @@ async fn deck_exit(app: AppHandle) -> CmdResult<()> {
     exit_deck(&app)
 }
 
-/// 編集モードなど、キーボード入力が必要なときだけフォーカスを受け取れるようにする。
 /// Deck モードでないときは普通のウィンドウなので何もしない。
 #[tauri::command]
 async fn set_focusable(app: AppHandle, window: tauri::WebviewWindow, focusable: bool) {
@@ -224,8 +216,6 @@ async fn open_touch_setup() -> CmdResult<()> {
         .map(|_| ())
         .map_err(|e| e.to_string())
 }
-
-// ---------------------------------------------------------------- コマンド: デッキ
 
 #[tauri::command]
 async fn get_deck(app: AppHandle) -> Option<serde_json::Value> {
@@ -254,7 +244,6 @@ async fn stop_key_recording(keep_timing: bool) -> Vec<macros::Step> {
     macros::stop_recording(keep_timing)
 }
 
-/// ボタンの表示に使う状態（マイクのミュート、既定の出力デバイス）
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct States {
@@ -277,7 +266,6 @@ async fn get_icon(target: String) -> Option<String> {
     icons::icon_for(&target)
 }
 
-/// 最後に前面にあったアプリ（win-deck 自身などは除く）
 #[tauri::command]
 async fn get_foreground_app(app: AppHandle) -> Option<foreground::WindowApp> {
     app.state::<foreground::LastForeground>().0.lock().unwrap().clone()
@@ -292,8 +280,6 @@ async fn list_window_apps() -> Vec<foreground::WindowApp> {
 async fn list_installed_games() -> Vec<games::Game> {
     games::list_games()
 }
-
-// ---------------------------------------------------------------- コマンド: システムパネル
 
 #[tauri::command]
 async fn get_volume() -> CmdResult<system::Volume> {
@@ -390,8 +376,6 @@ async fn set_power_plan(id: String) -> CmdResult<()> {
     system::set_power_plan(&id)
 }
 
-// ---------------------------------------------------------------- 起動
-
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let enter = MenuItem::with_id(app, "enter", "Deck モード開始", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, "exit", "Deck モード終了", true, None::<&str>)?;
@@ -462,7 +446,6 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
-            // 閉じるボタンではトレイに常駐させる
             if let WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
                     api.prevent_close();
@@ -507,8 +490,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod smoke {
-    //! 実機の状態を読むだけのスモークテスト（画面配置などは変更しない）。
-    //! `cargo test -- --nocapture` で内容を表示できる。
+    //! 実機の状態を読むだけのスモークテスト。画面配置や音声デバイスは変更しない。
 
     #[test]
     fn reads_system_state() {

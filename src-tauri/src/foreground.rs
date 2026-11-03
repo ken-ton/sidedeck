@@ -1,5 +1,3 @@
-//! 前面のアプリの監視（ページの自動切替用）と、ウィンドウを持つアプリの一覧。
-
 use std::collections::HashSet;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -13,12 +11,11 @@ use windows::core::{BOOL, PWSTR};
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct WindowApp {
-    /// 小文字のプロセス名（例: "code.exe"）
+    /// 小文字のプロセス名
     pub name: String,
     pub title: String,
 }
 
-/// 自動切替の対象にしないプロセス（シェルの一時的な UI や win-deck 自身）
 const IGNORE: &[&str] = &[
     "win-deck.exe",
     "searchhost.exe",
@@ -30,7 +27,6 @@ const IGNORE: &[&str] = &[
     "applicationframehost.exe",
 ];
 
-/// 最後に前面にあったアプリ
 #[derive(Default)]
 pub struct LastForeground(pub Mutex<Option<WindowApp>>);
 
@@ -58,7 +54,6 @@ fn window_app(hwnd: HWND) -> Option<WindowApp> {
     }
 }
 
-/// 前面のアプリが変わるたびに `foreground-app` イベントを送る。
 pub fn spawn_watcher(app: AppHandle) {
     std::thread::spawn(move || {
         let mut last_name = String::new();
@@ -79,7 +74,6 @@ pub fn spawn_watcher(app: AppHandle) {
     });
 }
 
-/// タイトル付きの表示中ウィンドウを持つアプリを、プロセス名ごとに 1 つずつ返す。
 pub fn list_window_apps() -> Vec<WindowApp> {
     unsafe extern "system" fn cb(h: HWND, data: LPARAM) -> BOOL {
         unsafe {

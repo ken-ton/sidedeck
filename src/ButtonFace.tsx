@@ -1,6 +1,5 @@
 import type { DeckButton } from "./deck";
 
-/** ボタンの見た目（アイコンと名前）。デッキとエディターのプレビューで共用する。 */
 export default function ButtonFace({ button, sub }: { button: DeckButton; sub?: string | null }) {
   const { icon, label } = button;
   return (

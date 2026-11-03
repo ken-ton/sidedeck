@@ -1,4 +1,3 @@
-//! デッキのボタンに割り当てる操作の実行。
 //! ページ移動やシステムパネル表示など、画面内で完結する操作はフロントエンドが処理する。
 
 use std::path::Path;
@@ -9,26 +8,21 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
-    /// アプリ・ファイル・フォルダ・URL を開く
     Launch {
         target: String,
         #[serde(default)]
         args: String,
     },
-    /// キーの組み合わせを送る（例: ["ctrl", "shift", "s"]）
     Hotkey { keys: Vec<String> },
-    /// 文字列を入力する
     Text { text: String },
-    /// メディア操作（play_pause / next / prev / stop / volume_up / volume_down / mute）
     Media { command: String },
-    /// マイクのミュート切替
     MicMute,
-    /// 出力デバイスの切替。空なら全デバイスを順番に切り替える
+    /// 空なら全デバイスを順番に切り替える
     AudioDevice {
         #[serde(default, rename = "deviceIds")]
         device_ids: Vec<String>,
     },
-    /// ステップを順に実行する。`repeat` が 0 なら停止されるまで繰り返す
+    /// `repeat` が 0 なら停止されるまで繰り返す
     Macro {
         steps: Vec<crate::macros::Step>,
         #[serde(default = "one")]
@@ -40,7 +34,6 @@ fn one() -> u32 {
     1
 }
 
-/// 引数文字列を空白で分割する（ダブルクォートで囲んだ部分は 1 つの引数）。
 fn split_args(s: &str) -> Vec<String> {
     let mut out = Vec::new();
     let mut cur = String::new();
@@ -76,7 +69,6 @@ fn launch(app: &tauri::AppHandle, target: &str, args: &str) -> Result<(), String
     if target.is_empty() {
         return Err("起動するものが設定されていません".into());
     }
-    // steam://, https:// などの URL
     if target.contains("://") {
         return app.opener().open_url(target, None::<&str>).map_err(|e| e.to_string());
     }
@@ -89,11 +81,9 @@ fn launch(app: &tauri::AppHandle, target: &str, args: &str) -> Result<(), String
         }
         return cmd.spawn().map(|_| ()).map_err(|e| format!("起動できませんでした: {e}"));
     }
-    // .lnk / フォルダ / ドキュメントなどは関連付けに任せる
     app.opener().open_path(target, None::<&str>).map_err(|e| e.to_string())
 }
 
-/// 操作を実行する。表示用のメッセージがあれば返す。
 /// `button_id` はマクロの実行・停止の切り替えに使う。
 pub fn run(app: &tauri::AppHandle, action: Action, button_id: Option<String>) -> Result<Option<String>, String> {
     match action {

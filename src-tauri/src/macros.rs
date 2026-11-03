@@ -1,5 +1,3 @@
-//! マクロ（ステップの連続実行）と、キー入力の記録。
-
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
@@ -34,8 +32,7 @@ struct MacroState {
 
 static RUNNING: LazyLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = LazyLock::new(Default::default);
 
-/// 実行中なら停止し、そうでなければ別スレッドで実行を始める。
-/// `repeat` が 0 なら停止されるまで繰り返す。
+/// 同じ `id` が実行中なら停止する。`repeat` が 0 なら停止されるまで繰り返す。
 pub fn toggle(app: &AppHandle, id: String, steps: Vec<Step>, repeat: u32) -> Option<String> {
     let mut running = RUNNING.lock().unwrap();
     if let Some(cancel) = running.get(&id) {
@@ -116,8 +113,6 @@ fn run_steps(app: &AppHandle, steps: &[Step], repeat: u32, cancel: &AtomicBool, 
     Ok(())
 }
 
-// ---------------------------------------------------------------- 記録
-
 struct RecEvent {
     at: Instant,
     key: String,
@@ -176,7 +171,6 @@ pub fn start_recording() -> Result<(), String> {
     rx.recv_timeout(Duration::from_secs(3)).map_err(|_| "記録を開始できませんでした".to_string())?
 }
 
-/// 記録を止めて、ステップに変換して返す。`keep_timing` が false なら待ち時間を入れない。
 pub fn stop_recording(keep_timing: bool) -> Vec<Step> {
     let tid = HOOK_THREAD.load(Ordering::SeqCst);
     if tid != 0 {
@@ -188,7 +182,6 @@ pub fn stop_recording(keep_timing: bool) -> Vec<Step> {
     to_steps(&events, keep_timing)
 }
 
-/// 記録した押下・解放を、再生できるステップに変換する。
 /// 短く押して離しただけのキーは「キーを押す」1 ステップにまとめる。
 fn to_steps(events: &[RecEvent], keep_timing: bool) -> Vec<Step> {
     const TAP_MS: u128 = 150;

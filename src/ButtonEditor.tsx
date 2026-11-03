@@ -41,8 +41,6 @@ const baseName = (p: string) =>
     .pop()
     ?.replace(/\.(exe|lnk|url|bat|cmd)$/i, "") ?? p;
 
-// ---------------------------------------------------------------- 操作ごとの入力欄
-
 function LaunchFields({
   action,
   onChange,
@@ -181,8 +179,6 @@ function AudioDeviceFields({ action, onChange }: { action: Extract<Action, { typ
     </>
   );
 }
-
-// ---------------------------------------------------------------- エディター本体
 
 export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, onMove, onClose, onError }: Props) {
   const [b, setB] = useState<DeckButton>(initial);

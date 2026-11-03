@@ -1,5 +1,3 @@
-// デッキ（ページとボタン）のデータ構造と、関連するヘルパー。
-
 export type Icon = { kind: "emoji"; value: string } | { kind: "image"; src: string } | null;
 
 export type MediaCommand = "play_pause" | "next" | "prev" | "stop" | "volume_up" | "volume_down" | "mute";
@@ -29,7 +27,7 @@ export type ActionType = Action["type"];
 
 export type DeckButton = {
   id: string;
-  /** グリッド上の位置（左上から 0, 1, 2, …） */
+  /** 左上から 0, 1, 2, … */
   slot: number;
   label: string;
   icon: Icon;
@@ -40,10 +38,10 @@ export type DeckButton = {
 export type Page = {
   id: string;
   name: string;
-  /** true ならフォルダ（タブには出さず、ボタンから開く） */
+  /** フォルダはタブに出さず、ボタンから開く */
   folder: boolean;
   buttons: DeckButton[];
-  /** このアプリ（小文字のプロセス名）が前面に来たら、このページに自動で切り替える */
+  /** 小文字のプロセス名。前面に来たらこのページに自動で切り替える */
   apps?: string[];
 };
 
@@ -52,7 +50,7 @@ export type DeckData = {
   columns: number;
   rows: number;
   pages: Page[];
-  /** 前面のアプリに合わせてページを自動で切り替える（未設定なら有効） */
+  /** 未設定なら有効 */
   autoSwitch?: boolean;
 };
 
@@ -104,7 +102,6 @@ export function emptyAction(type: ActionType): Action {
   }
 }
 
-/** Rust 側で実行する操作か（false ならフロントエンドで処理する） */
 export const runsInBackend = (a: Action) => !["none", "page", "system_panel"].includes(a.type);
 
 const btn = (slot: number, label: string, emoji: string, action: Action, color: string | null = null): DeckButton => ({
@@ -116,7 +113,6 @@ const btn = (slot: number, label: string, emoji: string, action: Action, color: 
   action,
 });
 
-/** 初回起動時のデッキ */
 export function defaultDeck(): DeckData {
   return {
     version: 1,
@@ -147,8 +143,6 @@ export function defaultDeck(): DeckData {
     ],
   };
 }
-
-// ---------------------------------------------------------------- キー
 
 const CODE_TO_KEY: Record<string, string> = {
   Space: "space",
@@ -187,7 +181,6 @@ const CODE_TO_KEY: Record<string, string> = {
 
 export const MODIFIERS = ["ctrl", "shift", "alt", "win"] as const;
 
-/** KeyboardEvent から（修飾キー以外の）キー名を得る。修飾キーだけなら null。 */
 export function keyFromCode(code: string): string | null {
   if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase();
   if (/^Digit\d$/.test(code)) return code.slice(5);
@@ -213,7 +206,6 @@ const KEY_DISPLAY: Record<string, string> = {
 export const formatKeys = (keys: string[]) =>
   keys.map((k) => KEY_DISPLAY[k] ?? (k.length === 1 ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1))).join(" + ");
 
-/** "ctrl+shift+s" のような文字列を分解する */
 export const parseKeys = (s: string) =>
   s
     .split("+")

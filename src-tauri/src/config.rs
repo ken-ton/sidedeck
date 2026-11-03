@@ -7,13 +7,11 @@ use crate::display::MonitorInfo;
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Config {
-    /// Deck 用モニター（MD-14T）のデバイスパス
+    /// モニターのデバイスパス（GDI 名は再接続で変わるため）
     pub deck_monitor: Option<String>,
-    /// 表示用の名前
     pub deck_monitor_name: Option<String>,
-    /// モニター接続時に自動で Deck モードに入る
     pub auto_deck: bool,
-    /// デッキ（ページとボタン）。構造はフロントエンドが管理する。
+    /// 構造はフロントエンドが管理する。
     pub deck: Option<serde_json::Value>,
     /// 旧バージョン（プライマリを切り替えていた頃）の画面配置。
     /// 残っていれば起動時に復元して消す。
@@ -28,7 +26,7 @@ impl Config {
             .unwrap_or_default()
     }
 
-    /// 一時ファイルに書いてから置き換える（書き込み中に落ちても設定が壊れないように）。
+    /// 書き込み中に落ちても設定が壊れないよう、一時ファイルに書いてから置き換える。
     pub fn save(&self, path: &PathBuf) {
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);

@@ -1,5 +1,3 @@
-//! 音量（Core Audio）と電源プラン（Power API）。
-
 use serde::Serialize;
 use windows::Win32::Foundation::{ERROR_SUCCESS, HLOCAL, LocalFree};
 use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
@@ -50,7 +48,7 @@ pub fn set_mute(muted: bool) -> Result<(), String> {
 
 #[derive(Serialize)]
 pub struct PowerPlan {
-    /// GUID を 32 桁の16進文字列にしたもの。
+    /// GUID を 32 桁の 16 進文字列にしたもの
     pub id: String,
     pub name: String,
     pub active: bool,

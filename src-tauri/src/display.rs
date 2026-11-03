@@ -1,5 +1,3 @@
-//! モニターの列挙・プライマリ切替・解像度変更・明るさ制御（Win32）。
-
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
@@ -12,11 +10,10 @@ use windows::core::{BOOL, PCWSTR, w};
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MonitorInfo {
-    /// GDI デバイス名（例: `\\.\DISPLAY2`）。再接続で変わることがある。
+    /// 再接続で変わることがある。
     pub gdi_name: String,
-    /// EDID 由来の表示名（例: `MD-14T`）。取れない場合は空。
     pub friendly_name: String,
-    /// モニターのデバイスパス。再接続しても変わらない識別子として使う。
+    /// 再接続しても変わらない識別子として使う。
     pub device_path: String,
     pub x: i32,
     pub y: i32,
@@ -42,7 +39,6 @@ pub fn from_wide(w: &[u16]) -> String {
     String::from_utf16_lossy(&w[..end])
 }
 
-/// CCD API で現在アクティブな表示パスとモードを取得する。
 fn query_active() -> Result<(Vec<DISPLAYCONFIG_PATH_INFO>, Vec<DISPLAYCONFIG_MODE_INFO>), String> {
     unsafe {
         let mut np = 0u32;
@@ -63,7 +59,6 @@ fn query_active() -> Result<(Vec<DISPLAYCONFIG_PATH_INFO>, Vec<DISPLAYCONFIG_MOD
     }
 }
 
-/// パスのソース（GDI 名、例: `\\.\DISPLAY1`）を取得する。
 fn source_gdi_name(p: &DISPLAYCONFIG_PATH_INFO) -> Option<String> {
     let mut src = DISPLAYCONFIG_SOURCE_DEVICE_NAME::default();
     src.header.r#type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
@@ -73,7 +68,7 @@ fn source_gdi_name(p: &DISPLAYCONFIG_PATH_INFO) -> Option<String> {
     (unsafe { DisplayConfigGetDeviceInfo(&mut src.header) } == 0).then(|| from_wide(&src.viewGdiDeviceName))
 }
 
-/// アクティブな表示パスごとに (GDI 名, 表示名, デバイスパス) を返す。
+/// (GDI 名, 表示名, デバイスパス)
 fn active_targets() -> Vec<(String, String, String)> {
     let mut out = Vec::new();
     let Ok((paths, _)) = query_active() else { return out };
@@ -141,8 +136,6 @@ pub fn list_monitors() -> Vec<MonitorInfo> {
         .collect()
 }
 
-/// (GDI 名, x, y, プライマリか) の配置を一括で適用する。
-///
 /// 旧 API の `ChangeDisplaySettingsEx` は環境によって DISP_CHANGE_FAILED になるため、
 /// 設定アプリと同じ CCD API（SetDisplayConfig）でソースモードの位置を書き換える。
 /// CCD ではデスクトップ座標 (0,0) にあるソースがプライマリになる。
@@ -175,7 +168,7 @@ fn apply_layout(entries: &[(String, i32, i32, bool)]) -> Result<(), String> {
     Ok(())
 }
 
-/// 保存しておいた配置に戻す。GDI 名は変わり得るのでデバイスパスで対応付ける。
+/// GDI 名は変わり得るので、デバイスパスで対応付ける。
 pub fn restore_layout(saved: &[MonitorInfo]) -> Result<(), String> {
     let current = list_monitors();
     let entries: Vec<_> = saved
@@ -229,8 +222,6 @@ pub fn set_mode(gdi: &str, mode: DisplayMode) -> Result<(), String> {
     Ok(())
 }
 
-// ---------------------------------------------------------------- 明るさ
-
 pub fn hmonitor_for(gdi: &str) -> Option<HMONITOR> {
     unsafe extern "system" fn cb(h: HMONITOR, _: HDC, _: *mut RECT, data: LPARAM) -> BOOL {
         unsafe { (*(data.0 as *mut Vec<HMONITOR>)).push(h) };
@@ -263,7 +254,6 @@ fn with_physical<T>(gdi: &str, f: impl FnOnce(HANDLE) -> Option<T>) -> Option<T>
     }
 }
 
-/// DDC/CI で明るさ（0–100）を取得。モニターが非対応なら None。
 pub fn ddc_get_brightness(gdi: &str) -> Option<u32> {
     with_physical(gdi, |h| {
         let (mut min, mut cur, mut max) = (0u32, 0u32, 0u32);
@@ -286,7 +276,6 @@ pub fn ddc_set_brightness(gdi: &str, percent: u32) -> bool {
     .is_some()
 }
 
-/// DDC/CI 非対応モニター向けのソフトウェア減光（ガンマランプ）。
 /// Windows は極端なランプを拒否するので、下限は 50% 程度になる。
 pub fn gamma_set(gdi: &str, level: f32) -> bool {
     let level = level.clamp(0.5, 1.0);
