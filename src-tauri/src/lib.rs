@@ -2,6 +2,7 @@ mod config;
 mod display;
 mod games;
 mod system;
+mod input;
 mod window_mover;
 
 use std::path::PathBuf;
@@ -81,8 +82,9 @@ fn place_main_fullscreen(app: &AppHandle) {
         let _ = win.set_decorations(false);
         let _ = win.set_position(PhysicalPosition::new(x, y));
         let _ = win.set_size(PhysicalSize::new(w, h));
+        // タップしても前面のアプリ・ゲームからフォーカスを奪わないようにする
+        input::set_noactivate(&win, true);
         let _ = win.show();
-        let _ = win.set_focus();
     }
 }
 
@@ -112,10 +114,8 @@ fn place_quick(app: &AppHandle, expanded: bool) {
     let _ = win.set_size(PhysicalSize::new(qw, qh));
     let _ = win.set_position(PhysicalPosition::new(qx, qy));
     let _ = win.set_always_on_top(true);
+    input::set_noactivate(&win, true);
     let _ = win.show();
-    if expanded {
-        let _ = win.set_focus();
-    }
     let _ = win.emit("quick-expanded", expanded);
 }
 
@@ -158,6 +158,7 @@ fn exit_deck(app: &AppHandle) -> Result<(), String> {
         let _ = q.hide();
     }
     if let Some(win) = app.get_webview_window("main") {
+        input::set_noactivate(&win, false);
         let _ = win.set_decorations(true);
         let _ = win.set_size(LogicalSize::new(1100.0, 720.0));
         let _ = win.center();
@@ -445,6 +446,38 @@ async fn open_touch_setup() -> CmdResult<()> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn send_keys(keys: Vec<String>) -> CmdResult<String> {
+    // 検証用: 送信先の情報を返す
+    let (name, elevated) = input::foreground_info();
+    let info = format!(
+        "送信先: {name} / 管理者権限: {} / win-deck: {}",
+        match elevated {
+            Some(true) => "あり",
+            Some(false) => "なし",
+            None => "不明（取得できず）",
+        },
+        if input::self_elevated() { "管理者" } else { "通常" }
+    );
+    eprintln!("[send_keys] {keys:?} {info}");
+    input::send_keys(&keys)?;
+    Ok(info)
+}
+
+#[tauri::command]
+async fn send_text(text: String) -> CmdResult<()> {
+    input::send_text(&text)
+}
+
+/// 編集モードなど、キーボード入力が必要なときだけフォーカスを受け取れるようにする。
+#[tauri::command]
+async fn set_focusable(window: tauri::WebviewWindow, focusable: bool) {
+    input::set_noactivate(&window, !focusable);
+    if focusable {
+        let _ = window.set_focus();
+    }
+}
+
 // ---------------------------------------------------------------- 起動
 
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
@@ -558,6 +591,9 @@ pub fn run() {
             list_power_plans,
             set_power_plan,
             open_touch_setup,
+            send_keys,
+            send_text,
+            set_focusable,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -61,6 +61,9 @@ export const api = {
   listPowerPlans: () => invoke<PowerPlan[]>("list_power_plans"),
   setPowerPlan: (id: string) => invoke<void>("set_power_plan", { id }),
   openTouchSetup: () => invoke<void>("open_touch_setup"),
+  sendKeys: (keys: string[]) => invoke<string>("send_keys", { keys }),
+  sendText: (text: string) => invoke<void>("send_text", { text }),
+  setFocusable: (focusable: boolean) => invoke<void>("set_focusable", { focusable }),
 };
 
 /** 連続したスライダー操作をまとめて送る */

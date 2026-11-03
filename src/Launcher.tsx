@@ -101,6 +101,24 @@ export default function Launcher() {
 
       {tab === "library" ? (
         <main className="library">
+          {/* 検証用（フォーカスを奪わずにキーを送れるか） */}
+          <div className="chips spike">
+            {(
+              [
+                ["文字: hello", () => api.sendText("hello ")],
+                ["W（スキャンコード）", () => api.sendKeys(["w"])],
+                ["Space", () => api.sendKeys(["space"])],
+                ["Ctrl+A", () => api.sendKeys(["ctrl", "a"])],
+                ["Alt+Tab", () => api.sendKeys(["alt", "tab"])],
+                ["再生/停止", () => api.sendKeys(["media_play_pause"])],
+                ["次の曲", () => api.sendKeys(["media_next"])],
+              ] as [string, () => Promise<unknown>][]
+            ).map(([label, fn]) => (
+              <button key={label} onClick={() => fn().then((r) => typeof r === "string" && showToast(r)).catch((e) => showToast(String(e)))}>
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="chips">
             {(["all", "steam", "epic", "custom"] as const).map((f) => (
               <button key={f} className={filter === f ? "on" : ""} onClick={() => setFilter(f)}>

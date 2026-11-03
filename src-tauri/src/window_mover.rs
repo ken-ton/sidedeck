@@ -33,7 +33,7 @@ const SKIP: &[&str] = &[
     "lockapp.exe",
 ];
 
-fn process_name(pid: u32) -> Option<String> {
+pub(crate) fn process_name(pid: u32) -> Option<String> {
     unsafe {
         let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
         let mut buf = [0u16; 1024];
