@@ -13,7 +13,13 @@ function Clock() {
     const t = setInterval(() => setNow(new Date()), 10_000);
     return () => clearInterval(t);
   }, []);
-  return <span className="clock">{now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span>;
+  const p = (n: number) => String(n).padStart(2, "0");
+  const weekday = "日月火水木金土"[now.getDay()];
+  return (
+    <span className="clock">
+      {p(now.getMonth() + 1)}/{p(now.getDate())} ({weekday}) {p(now.getHours())}:{p(now.getMinutes())}
+    </span>
+  );
 }
 
 function AppsField({ apps, onChange, lastApp }: { apps: string[]; onChange: (apps: string[]) => void; lastApp: WindowApp | null }) {
