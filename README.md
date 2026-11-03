@@ -1,6 +1,6 @@
 # win-deck
 
-デスクトップ PC にタッチ対応モバイルモニター（VisionOwl MD-14T など）をつなぎ、
+デスクトップ PC にタッチ対応モバイルモニターをつなぎ、
 Stream Deck のような**タッチ操作のボタンパネル**として使うための Windows アプリです。
 
 Tauri 2（Rust）＋ React / TypeScript で作っています。
