@@ -1,8 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the launcher and quick-settings windows",
-  "windows": ["main", "quick"],
+  "description": "Capability for the deck window",
+  "windows": [
+    "main"
+  ],
   "permissions": [
     "core:default",
     "opener:default",

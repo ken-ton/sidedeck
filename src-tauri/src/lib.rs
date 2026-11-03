@@ -1,9 +1,11 @@
+mod actions;
+mod audio;
 mod config;
 mod display;
 mod games;
-mod system;
+mod icons;
 mod input;
-mod window_mover;
+mod system;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -14,18 +16,14 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::TrayIconBuilder;
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WindowEvent};
 
-use config::{Config, CustomGame};
+use config::Config;
 use display::{DisplayMode, MonitorInfo};
-
-const QUICK_BUTTON: f64 = 72.0; // 論理ピクセル
-const QUICK_PANEL_WIDTH: f64 = 420.0;
 
 #[derive(Default)]
 struct Deck {
     active: bool,
     /// Deck モニターの矩形（物理ピクセル）
     rect: (i32, i32, u32, u32),
-    quick_expanded: bool,
     gamma: f32,
 }
 
@@ -74,8 +72,9 @@ fn emit_status(app: &AppHandle) {
     let _ = app.emit("deck-status", status(app));
 }
 
-// ---------------------------------------------------------------- ウィンドウ配置
+// ---------------------------------------------------------------- Deck モード
 
+/// デッキを Deck モニターいっぱいに表示する。プライマリや画面配置は変更しない。
 fn place_main_fullscreen(app: &AppHandle) {
     let (x, y, w, h) = app.state::<AppState>().deck.lock().unwrap().rect;
     if let Some(win) = app.get_webview_window("main") {
@@ -88,75 +87,22 @@ fn place_main_fullscreen(app: &AppHandle) {
     }
 }
 
-fn place_quick(app: &AppHandle, expanded: bool) {
-    let st = app.state::<AppState>();
-    let (x, y, w, h) = {
-        let mut d = st.deck.lock().unwrap();
-        d.quick_expanded = expanded;
-        d.rect
-    };
-    let Some(win) = app.get_webview_window("quick") else { return };
-    // ウィンドウが今いる画面ではなく、Deck モニターの DPI 倍率を使う
-    let scale = app
-        .available_monitors()
-        .ok()
-        .and_then(|ms| ms.into_iter().find(|m| m.position().x == x && m.position().y == y))
-        .map(|m| m.scale_factor())
-        .unwrap_or_else(|| win.scale_factor().unwrap_or(1.0));
-    let (qw, qh) = if expanded {
-        ((QUICK_PANEL_WIDTH * scale) as u32, h)
-    } else {
-        let s = (QUICK_BUTTON * scale) as u32;
-        (s, s)
-    };
-    let qx = x + w as i32 - qw as i32;
-    let qy = y + (h as i32 - qh as i32) / 2;
-    let _ = win.set_size(PhysicalSize::new(qw, qh));
-    let _ = win.set_position(PhysicalPosition::new(qx, qy));
-    let _ = win.set_always_on_top(true);
-    input::set_noactivate(&win, true);
-    let _ = win.show();
-    let _ = win.emit("quick-expanded", expanded);
-}
-
-// ---------------------------------------------------------------- Deck モード
-
 fn enter_deck(app: &AppHandle) -> Result<(), String> {
-    // プライマリや画面配置は変更しない。ランチャーを Deck モニター上に置くだけ。
     let st = app.state::<AppState>();
     let mon = st.deck_monitor()?;
     {
         let mut d = st.deck.lock().unwrap();
         d.active = true;
         d.rect = (mon.x, mon.y, mon.width, mon.height);
-        if d.gamma == 0.0 {
-            d.gamma = 1.0;
-        }
     }
     place_main_fullscreen(app);
-    place_quick(app, false);
     emit_status(app);
     Ok(())
 }
 
 fn exit_deck(app: &AppHandle) -> Result<(), String> {
     let st = app.state::<AppState>();
-    window_mover::cancel();
-    // 旧バージョンで変更した配置が残っていれば戻す
-    let saved = st.config.lock().unwrap().saved_layout.clone();
-    let result = match &saved {
-        Some(layout) => display::restore_layout(layout),
-        None => Ok(()),
-    };
-    if result.is_ok() {
-        st.config.lock().unwrap().saved_layout = None;
-        st.save();
-    }
     st.deck.lock().unwrap().active = false;
-
-    if let Some(q) = app.get_webview_window("quick") {
-        let _ = q.hide();
-    }
     if let Some(win) = app.get_webview_window("main") {
         input::set_noactivate(&win, false);
         let _ = win.set_decorations(true);
@@ -165,7 +111,7 @@ fn exit_deck(app: &AppHandle) -> Result<(), String> {
         let _ = win.show();
     }
     emit_status(app);
-    result
+    Ok(())
 }
 
 /// モニターの抜き差しを監視し、自動で Deck モードに入る／抜ける。
@@ -197,7 +143,7 @@ fn spawn_monitor_watcher(app: AppHandle) {
     });
 }
 
-// ---------------------------------------------------------------- コマンド
+// ---------------------------------------------------------------- コマンド: 設定
 
 type CmdResult<T> = Result<T, String>;
 
@@ -212,27 +158,12 @@ struct ConfigView {
     deck_monitor: Option<String>,
     deck_monitor_name: Option<String>,
     auto_deck: bool,
-    move_game_windows: bool,
-    custom_games: Vec<CustomGame>,
 }
 
 #[tauri::command]
 async fn get_config(app: AppHandle) -> ConfigView {
     let c = app.state::<AppState>().config.lock().unwrap().clone();
-    ConfigView {
-        deck_monitor: c.deck_monitor,
-        deck_monitor_name: c.deck_monitor_name,
-        auto_deck: c.auto_deck,
-        move_game_windows: c.move_game_windows,
-        custom_games: c.custom_games,
-    }
-}
-
-#[tauri::command]
-async fn set_move_game_windows(app: AppHandle, enabled: bool) {
-    let st = app.state::<AppState>();
-    st.config.lock().unwrap().move_game_windows = enabled;
-    st.save();
+    ConfigView { deck_monitor: c.deck_monitor, deck_monitor_name: c.deck_monitor_name, auto_deck: c.auto_deck }
 }
 
 #[tauri::command]
@@ -255,58 +186,6 @@ async fn set_auto_deck(app: AppHandle, enabled: bool) {
 }
 
 #[tauri::command]
-async fn add_custom_game(app: AppHandle, title: String, path: String) {
-    let st = app.state::<AppState>();
-    let id = format!(
-        "{:x}",
-        std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis()
-    );
-    st.config.lock().unwrap().custom_games.push(CustomGame { id, title, path });
-    st.save();
-}
-
-#[tauri::command]
-async fn remove_custom_game(app: AppHandle, id: String) {
-    let st = app.state::<AppState>();
-    st.config.lock().unwrap().custom_games.retain(|g| g.id != id);
-    st.save();
-}
-
-#[tauri::command]
-async fn list_games(app: AppHandle) -> Vec<games::Game> {
-    let custom = app.state::<AppState>().config.lock().unwrap().custom_games.clone();
-    games::list_games(&custom)
-}
-
-#[tauri::command]
-async fn launch_game(app: AppHandle, id: String) -> CmdResult<()> {
-    let custom = app.state::<AppState>().config.lock().unwrap().custom_games.clone();
-    let game = games::list_games(&custom)
-        .into_iter()
-        .find(|g| g.id == id)
-        .ok_or("ゲームが見つかりません")?;
-    let st = app.state::<AppState>();
-    let active = st.deck.lock().unwrap().active;
-    // 起動前のウィンドウを記録するため、起動より先に監視を始める
-    if active && st.config.lock().unwrap().move_game_windows {
-        if let Ok(mon) = st.deck_monitor() {
-            window_mover::follow_launch(mon.gdi_name, Duration::from_secs(120), game.source == "steam");
-        }
-    }
-    if let Err(e) = games::launch(&app, &game) {
-        window_mover::cancel();
-        return Err(e);
-    }
-    if active {
-        // ゲームが前面に出るようにランチャーを隠す（クイックボタンは残る）
-        if let Some(win) = app.get_webview_window("main") {
-            let _ = win.hide();
-        }
-    }
-    Ok(())
-}
-
-#[tauri::command]
 async fn deck_status(app: AppHandle) -> DeckStatus {
     status(&app)
 }
@@ -321,21 +200,77 @@ async fn deck_exit(app: AppHandle) -> CmdResult<()> {
     exit_deck(&app)
 }
 
+/// 編集モードなど、キーボード入力が必要なときだけフォーカスを受け取れるようにする。
+/// Deck モードでないときは普通のウィンドウなので何もしない。
 #[tauri::command]
-async fn show_home(app: AppHandle) {
-    if app.state::<AppState>().deck.lock().unwrap().active {
-        place_quick(&app, false);
-        place_main_fullscreen(&app);
-    } else if let Some(win) = app.get_webview_window("main") {
-        let _ = win.show();
-        let _ = win.set_focus();
+async fn set_focusable(app: AppHandle, window: tauri::WebviewWindow, focusable: bool) {
+    if !app.state::<AppState>().deck.lock().unwrap().active {
+        return;
+    }
+    input::set_noactivate(&window, !focusable);
+    if focusable {
+        let _ = window.set_focus();
     }
 }
 
+/// Windows の「タッチ入力を行う画面の識別」ツールを開く。
 #[tauri::command]
-async fn quick_set_expanded(app: AppHandle, expanded: bool) {
-    place_quick(&app, expanded);
+async fn open_touch_setup() -> CmdResult<()> {
+    std::process::Command::new("MultiDigiMon.exe")
+        .arg("-touch")
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
+
+// ---------------------------------------------------------------- コマンド: デッキ
+
+#[tauri::command]
+async fn get_deck(app: AppHandle) -> Option<serde_json::Value> {
+    app.state::<AppState>().config.lock().unwrap().deck.clone()
+}
+
+#[tauri::command]
+async fn save_deck(app: AppHandle, deck: serde_json::Value) {
+    let st = app.state::<AppState>();
+    st.config.lock().unwrap().deck = Some(deck);
+    st.save();
+}
+
+#[tauri::command]
+async fn run_action(app: AppHandle, action: actions::Action) -> CmdResult<Option<String>> {
+    actions::run(&app, action)
+}
+
+/// ボタンの表示に使う状態（マイクのミュート、既定の出力デバイス）
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct States {
+    mic_muted: Option<bool>,
+    default_output: Option<String>,
+}
+
+#[tauri::command]
+async fn get_states() -> States {
+    States { mic_muted: audio::mic_muted(), default_output: audio::default_output_id() }
+}
+
+#[tauri::command]
+async fn list_audio_outputs() -> CmdResult<Vec<audio::AudioDevice>> {
+    audio::list_outputs()
+}
+
+#[tauri::command]
+async fn get_icon(target: String) -> Option<String> {
+    icons::icon_for(&target)
+}
+
+#[tauri::command]
+async fn list_installed_games() -> Vec<games::Game> {
+    games::list_games()
+}
+
+// ---------------------------------------------------------------- コマンド: システムパネル
 
 #[tauri::command]
 async fn get_volume() -> CmdResult<system::Volume> {
@@ -368,7 +303,7 @@ async fn get_brightness(app: AppHandle) -> CmdResult<Brightness> {
         Some(v) => Brightness { method: "ddc", value: v, min: 0 },
         None => {
             let g = st.deck.lock().unwrap().gamma;
-            Brightness { method: "gamma", value: ((if g == 0.0 { 1.0 } else { g }) * 100.0) as u32, min: 50 }
+            Brightness { method: "gamma", value: (g * 100.0) as u32, min: 50 }
         }
     })
 }
@@ -417,11 +352,7 @@ async fn set_mode(app: AppHandle, mode: DisplayMode) -> CmdResult<()> {
         d.active
     };
     if active {
-        let expanded = st.deck.lock().unwrap().quick_expanded;
-        place_quick(&app, expanded);
-        if app.get_webview_window("main").is_some_and(|w| w.is_visible().unwrap_or(false)) {
-            place_main_fullscreen(&app);
-        }
+        place_main_fullscreen(&app);
     }
     Ok(())
 }
@@ -434,48 +365,6 @@ async fn list_power_plans() -> Vec<system::PowerPlan> {
 #[tauri::command]
 async fn set_power_plan(id: String) -> CmdResult<()> {
     system::set_power_plan(&id)
-}
-
-/// Windows の「タッチ入力を行う画面の識別」ツールを開く。
-#[tauri::command]
-async fn open_touch_setup() -> CmdResult<()> {
-    std::process::Command::new("MultiDigiMon.exe")
-        .arg("-touch")
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-async fn send_keys(keys: Vec<String>) -> CmdResult<String> {
-    // 検証用: 送信先の情報を返す
-    let (name, elevated) = input::foreground_info();
-    let info = format!(
-        "送信先: {name} / 管理者権限: {} / win-deck: {}",
-        match elevated {
-            Some(true) => "あり",
-            Some(false) => "なし",
-            None => "不明（取得できず）",
-        },
-        if input::self_elevated() { "管理者" } else { "通常" }
-    );
-    eprintln!("[send_keys] {keys:?} {info}");
-    input::send_keys(&keys)?;
-    Ok(info)
-}
-
-#[tauri::command]
-async fn send_text(text: String) -> CmdResult<()> {
-    input::send_text(&text)
-}
-
-/// 編集モードなど、キーボード入力が必要なときだけフォーカスを受け取れるようにする。
-#[tauri::command]
-async fn set_focusable(window: tauri::WebviewWindow, focusable: bool) {
-    input::set_noactivate(&window, !focusable);
-    if focusable {
-        let _ = window.set_focus();
-    }
 }
 
 // ---------------------------------------------------------------- 起動
@@ -506,12 +395,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
                     let _ = w.set_focus();
                 }
             }
-            "quit" => {
-                if app.state::<AppState>().deck.lock().unwrap().active {
-                    let _ = exit_deck(app);
-                }
-                app.exit(0);
-            }
+            "quit" => app.exit(0),
             _ => {}
         })
         .build(app)?;
@@ -533,7 +417,7 @@ pub fn run() {
             let config_path = app.path().app_config_dir()?.join("config.json");
             let mut config = Config::load(&config_path);
 
-            // 前回 Deck モードのまま異常終了していたら、画面配置を元に戻す
+            // 旧バージョンが変更した画面配置が残っていたら元に戻す
             if let Some(layout) = config.saved_layout.take() {
                 if let Err(e) = display::restore_layout(&layout) {
                     eprintln!("画面配置の復元に失敗: {e}");
@@ -546,12 +430,6 @@ pub fn run() {
                 config_path,
                 deck: Mutex::new(Deck { gamma: 1.0, ..Default::default() }),
             });
-
-            if let Some(root) = games::steam_root() {
-                let _ = app
-                    .asset_protocol_scope()
-                    .allow_directory(root.join("appcache").join("librarycache"), true);
-            }
 
             build_tray(app)?;
             spawn_monitor_watcher(app.handle().clone());
@@ -571,16 +449,18 @@ pub fn run() {
             get_config,
             set_deck_monitor,
             set_auto_deck,
-            set_move_game_windows,
-            add_custom_game,
-            remove_custom_game,
-            list_games,
-            launch_game,
             deck_status,
             deck_enter,
             deck_exit,
-            show_home,
-            quick_set_expanded,
+            set_focusable,
+            open_touch_setup,
+            get_deck,
+            save_deck,
+            run_action,
+            get_states,
+            list_audio_outputs,
+            get_icon,
+            list_installed_games,
             get_volume,
             set_volume,
             set_mute,
@@ -590,10 +470,6 @@ pub fn run() {
             set_mode,
             list_power_plans,
             set_power_plan,
-            open_touch_setup,
-            send_keys,
-            send_text,
-            set_focusable,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
@@ -611,18 +487,27 @@ mod smoke {
         assert_eq!(mons.iter().filter(|m| m.primary).count(), 1);
         for m in &mons {
             println!("{m:?} modes={}", crate::display::list_modes(&m.gdi_name).len());
-            println!("  ddc brightness = {:?}", crate::display::ddc_get_brightness(&m.gdi_name));
         }
         for p in crate::system::list_power_plans() {
             println!("power: {} {} active={}", p.id, p.name, p.active);
         }
         println!("volume ok = {}", crate::system::get_volume().is_ok());
-        println!("big picture monitor = {:?}", crate::window_mover::big_picture_monitor());
-        let prim = crate::display::list_monitors().into_iter().find(|m| m.primary).unwrap();
-        println!("primary hmonitor  = {:?}", crate::display::hmonitor_for(&prim.gdi_name));
-        for g in crate::games::list_games(&[]) {
-            println!("game: {} {} art={}", g.id, g.title, g.art.is_some());
+        println!("mic muted = {:?}", crate::audio::mic_muted());
+        for d in crate::audio::list_outputs().unwrap_or_default() {
+            println!("output: {} default={} id={}", d.name, d.is_default, d.id);
         }
+        // 既定デバイスを同じデバイスに設定し直す（実質変化なし）ことで、IPolicyConfig の呼び出しを確認する
+        if let Some(id) = crate::audio::default_output_id() {
+            let r = crate::audio::set_default_output(&id);
+            println!("set_default_output(既定のまま) = {r:?}");
+            assert!(r.is_ok());
+            assert_eq!(crate::audio::default_output_id().as_deref(), Some(id.as_str()));
+        }
+        let n = crate::games::list_games().len();
+        println!("installed games = {n}");
+        let notepad = r"C:\Windows\System32\notepad.exe";
+        let icon = crate::icons::icon_for(notepad);
+        println!("notepad icon = {:?}", icon.as_ref().map(|s| s.len()));
+        assert!(icon.is_some_and(|s| s.starts_with("data:image/png;base64,")), "exe のアイコンが取れない");
     }
 }
-

@@ -1,20 +1,17 @@
-//! Steam / Epic / 手動登録のゲームを集めて起動する。
+//! インストール済みの Steam / Epic ゲームを集める（デッキのボタン登録用）。
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde::Serialize;
 use winreg::RegKey;
 use winreg::enums::HKEY_CURRENT_USER;
-
-use crate::config::CustomGame;
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Game {
     pub id: String,
     pub title: String,
-    /// "steam" | "epic" | "custom"
+    /// "steam" | "epic"
     pub source: String,
     /// URL（steam:// / com.epicgames.launcher://）または実行ファイルのパス
     pub launch: String,
@@ -39,7 +36,7 @@ fn vdf_pairs(text: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-fn find_art(root: &Path, appid: &str) -> Option<String> {
+pub fn find_art(root: &Path, appid: &str) -> Option<String> {
     let cache = root.join("appcache").join("librarycache");
     let dir = cache.join(appid);
     let mut dirs = vec![dir.clone()];
@@ -136,35 +133,9 @@ fn epic_games() -> Vec<Game> {
         .collect()
 }
 
-pub fn list_games(custom: &[CustomGame]) -> Vec<Game> {
+pub fn list_games() -> Vec<Game> {
     let mut v = steam_games();
     v.extend(epic_games());
-    v.extend(custom.iter().map(|c| Game {
-        id: format!("custom:{}", c.id),
-        title: c.title.clone(),
-        source: "custom".into(),
-        launch: c.path.clone(),
-        art: None,
-    }));
     v.sort_by_key(|g| g.title.to_lowercase());
     v
-}
-
-/// ゲームを起動する。URL はシェル経由で、exe は作業ディレクトリを exe の場所にして起動する。
-pub fn launch(app: &tauri::AppHandle, game: &Game) -> Result<(), String> {
-    use tauri_plugin_opener::OpenerExt;
-    if game.source != "custom" {
-        return app.opener().open_url(&game.launch, None::<&str>).map_err(|e| e.to_string());
-    }
-    let path = Path::new(&game.launch);
-    if path.extension().is_some_and(|x| x.eq_ignore_ascii_case("exe")) {
-        let mut cmd = Command::new(path);
-        if let Some(dir) = path.parent() {
-            cmd.current_dir(dir);
-        }
-        cmd.spawn().map(|_| ()).map_err(|e| e.to_string())
-    } else {
-        // .lnk / .url / .bat などはシェルに任せる
-        app.opener().open_path(&game.launch, None::<&str>).map_err(|e| e.to_string())
-    }
 }

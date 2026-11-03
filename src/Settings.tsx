@@ -1,17 +1,23 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { open } from "@tauri-apps/plugin-dialog";
-import { api, Config, MonitorInfo } from "./api";
+import { api, Config, DeckStatus, MonitorInfo } from "./api";
+import type { DeckData } from "./deck";
 
-type Props = { onGamesChanged: () => void; onError: (msg: string) => void };
+type Props = {
+  deck: DeckData;
+  status: DeckStatus;
+  onDeckChange: (deck: DeckData) => void;
+  onResetDeck: () => void;
+  onError: (msg: string) => void;
+  onClose: () => void;
+};
 
-function monitorLabel(m: MonitorInfo) {
-  return m.friendlyName || m.gdiName.replace("\\\\.\\", "");
-}
+const monitorLabel = (m: MonitorInfo) => m.friendlyName || m.gdiName.replace("\\\\.\\", "");
 
-export default function Settings({ onGamesChanged, onError }: Props) {
+export default function Settings({ deck, status, onDeckChange, onResetDeck, onError, onClose }: Props) {
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const reload = useCallback(async () => {
     setMonitors(await api.listMonitors());
@@ -26,120 +32,128 @@ export default function Settings({ onGamesChanged, onError }: Props) {
     };
   }, [reload]);
 
-  if (!config) return null;
+  const toggleDeck = () => (status.active ? api.deckExit() : api.deckEnter()).catch((e) => onError(String(e)));
 
-  const chooseMonitor = async (m: MonitorInfo) => {
-    await api.setDeckMonitor(m.devicePath, monitorLabel(m));
-    reload();
-  };
-
-  const addGame = async () => {
-    const path = await open({
-      multiple: false,
-      directory: false,
-      filters: [{ name: "ゲーム / ショートカット", extensions: ["exe", "lnk", "url", "bat"] }],
-    });
-    if (typeof path !== "string") return;
-    const title = path.split(/[\\/]/).pop()!.replace(/\.(exe|lnk|url|bat)$/i, "");
-    await api.addCustomGame(title, path);
-    reload();
-    onGamesChanged();
-  };
-
-  const removeGame = async (id: string) => {
-    await api.removeCustomGame(id);
-    reload();
-    onGamesChanged();
+  // グリッドを小さくしたときに、はみ出すボタンがあるか
+  const resize = (columns: number, rows: number) => {
+    const max = columns * rows;
+    const lost = deck.pages.reduce((n, p) => n + p.buttons.filter((b) => b.slot >= max).length, 0);
+    if (lost > 0) {
+      onError(`${lost} 個のボタンがはみ出すため変更できません。先に移動か削除をしてください。`);
+      return;
+    }
+    onDeckChange({ ...deck, columns, rows });
   };
 
   return (
-    <main className="settings">
-      <section>
-        <h2>Deck 用モニター</h2>
-        <p className="hint">MD-14T を選んでください。Deck モード中は、このモニターにランチャーを全画面で表示します（プライマリは切り替えません）。</p>
-        <div className="monitor-list">
-          {monitors.map((m) => {
-            const selected = m.devicePath === config.deckMonitor;
-            return (
-              <button key={m.devicePath || m.gdiName} className={`monitor ${selected ? "on" : ""}`} onClick={() => chooseMonitor(m)}>
-                <strong>{monitorLabel(m)}</strong>
-                <span>
-                  {m.width}×{m.height} @ {m.refresh}Hz{m.primary ? " ・ プライマリ" : ""}
-                </span>
-                {selected && <span className="check">Deck 用</span>}
-              </button>
-            );
-          })}
+    <div className="overlay" onClick={onClose}>
+      <aside className="side-panel wide" onClick={(e) => e.stopPropagation()}>
+        <div className="panel-head">
+          <h1>設定</h1>
+          <button className="close" onClick={onClose} aria-label="閉じる">
+            ✕
+          </button>
         </div>
-        {config.deckMonitor && !monitors.some((m) => m.devicePath === config.deckMonitor) && (
-          <p className="hint warn">設定済みのモニター「{config.deckMonitorName}」は現在接続されていません。</p>
-        )}
-      </section>
 
-      <section>
-        <h2>自動切替</h2>
-        <label className="switch-row">
-          <span>モニターを接続したら自動で Deck モードにする</span>
-          <input
-            type="checkbox"
-            className="switch"
-            checked={config.autoDeck}
-            onChange={async (e) => {
-              await api.setAutoDeck(e.target.checked);
-              reload();
-            }}
-          />
-        </label>
-        <p className="hint">モニターを取り外すと Deck モードを終了します。</p>
-      </section>
+        <section>
+          <h2>Deck モード</h2>
+          <button className={`action ${status.active ? "secondary" : ""}`} onClick={toggleDeck} disabled={!status.active && !status.monitorConnected}>
+            {status.active ? "Deck モードを終了" : status.monitorConnected ? "Deck モードを開始" : "Deck 用モニターが未接続"}
+          </button>
+          <p className="hint">Deck モード中は、Deck 用モニターにデッキを全画面で表示します。タップしても他のアプリからフォーカスを奪いません。</p>
+        </section>
 
-      <section>
-        <h2>ゲームウィンドウ</h2>
-        <label className="switch-row">
-          <span>起動したゲームを Deck 用モニターへ移動する</span>
-          <input
-            type="checkbox"
-            className="switch"
-            checked={config.moveGameWindows}
-            onChange={async (e) => {
-              await api.setMoveGameWindows(e.target.checked);
-              reload();
-            }}
-          />
-        </label>
-        <p className="hint">
-          起動から 2 分間、前面に出たゲームのウィンドウを移動します。ボーダーレス全画面のゲームは画面いっぱいに合わせます。
-          排他フルスクリーンのゲームは移動できないことがあるので、ゲーム側でボーダーレスかウィンドウモードを選んでください。
-        </p>
-      </section>
-
-      <section>
-        <h2>タッチ入力</h2>
-        <p className="hint">タッチがメインモニター側に反応する場合は、Windows の設定で MD-14T をタッチ画面として登録してください。</p>
-        <button className="action" onClick={() => api.openTouchSetup().catch((e) => onError(String(e)))}>
-          タッチ画面のセットアップを開く
-        </button>
-      </section>
-
-      <section>
-        <h2>手動で追加したゲーム</h2>
-        <ul className="custom-games">
-          {config.customGames.map((g) => (
-            <li key={g.id}>
-              <div>
-                <strong>{g.title}</strong>
-                <small>{g.path}</small>
+        {config && (
+          <>
+            <section>
+              <h2>Deck 用モニター</h2>
+              <div className="monitor-list">
+                {monitors.map((m) => {
+                  const selected = m.devicePath === config.deckMonitor;
+                  return (
+                    <button
+                      key={m.devicePath || m.gdiName}
+                      className={`monitor ${selected ? "on" : ""}`}
+                      onClick={async () => {
+                        await api.setDeckMonitor(m.devicePath, monitorLabel(m));
+                        reload();
+                      }}
+                    >
+                      <strong>{monitorLabel(m)}</strong>
+                      <span>
+                        {m.width}×{m.height} @ {m.refresh}Hz{m.primary ? " ・ プライマリ" : ""}
+                      </span>
+                      {selected && <span className="check">Deck 用</span>}
+                    </button>
+                  );
+                })}
               </div>
-              <button className="danger" onClick={() => removeGame(g.id)}>
-                削除
-              </button>
-            </li>
-          ))}
-        </ul>
-        <button className="action" onClick={addGame}>
-          ＋ 実行ファイルを追加
-        </button>
-      </section>
-    </main>
+              {config.deckMonitor && !monitors.some((m) => m.devicePath === config.deckMonitor) && (
+                <p className="hint warn">設定済みのモニター「{config.deckMonitorName}」は現在接続されていません。</p>
+              )}
+            </section>
+
+            <section>
+              <label className="switch-row">
+                <span>モニターを接続したら自動で Deck モードにする</span>
+                <input
+                  type="checkbox"
+                  className="switch"
+                  checked={config.autoDeck}
+                  onChange={async (e) => {
+                    await api.setAutoDeck(e.target.checked);
+                    reload();
+                  }}
+                />
+              </label>
+            </section>
+          </>
+        )}
+
+        <section>
+          <h2>ボタンの数</h2>
+          <div className="grid-size">
+            <span>横</span>
+            <div className="chips wrap">
+              {[3, 4, 5, 6, 7, 8].map((n) => (
+                <button key={n} className={deck.columns === n ? "on" : ""} onClick={() => resize(n, deck.rows)}>
+                  {n}
+                </button>
+              ))}
+            </div>
+            <span>縦</span>
+            <div className="chips wrap">
+              {[2, 3, 4, 5].map((n) => (
+                <button key={n} className={deck.rows === n ? "on" : ""} onClick={() => resize(deck.columns, n)}>
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2>タッチ入力</h2>
+          <p className="hint">タッチがメインモニター側に反応する場合は、Deck 用モニターをタッチ画面として登録してください。</p>
+          <button className="action secondary" onClick={() => api.openTouchSetup().catch((e) => onError(String(e)))}>
+            タッチ画面のセットアップを開く
+          </button>
+        </section>
+
+        <section>
+          <h2>リセット</h2>
+          <button
+            className="danger"
+            onClick={() => {
+              if (!confirmReset) return setConfirmReset(true);
+              setConfirmReset(false);
+              onResetDeck();
+            }}
+          >
+            {confirmReset ? "もう一度タップすると、すべてのボタンを初期状態に戻します" : "デッキを初期状態に戻す"}
+          </button>
+        </section>
+      </aside>
+    </div>
   );
 }

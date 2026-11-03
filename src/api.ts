@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { Action, DeckData } from "./deck";
 
 export type MonitorInfo = {
   gdiName: string;
@@ -12,45 +13,43 @@ export type MonitorInfo = {
   primary: boolean;
 };
 
-export type CustomGame = { id: string; title: string; path: string };
-
 export type Config = {
   deckMonitor: string | null;
   deckMonitorName: string | null;
   autoDeck: boolean;
-  moveGameWindows: boolean;
-  customGames: CustomGame[];
 };
 
-export type Game = {
-  id: string;
-  title: string;
-  source: "steam" | "epic" | "custom";
-  launch: string;
-  art: string | null;
-};
-
+export type InstalledGame = { id: string; title: string; source: "steam" | "epic"; launch: string; art: string | null };
 export type DeckStatus = { active: boolean; monitorConnected: boolean };
+export type States = { micMuted: boolean | null; defaultOutput: string | null };
+export type AudioDevice = { id: string; name: string; isDefault: boolean };
 export type Volume = { level: number; muted: boolean };
 export type Brightness = { method: "ddc" | "gamma"; value: number; min: number };
 export type DisplayMode = { width: number; height: number; refresh: number };
 export type PowerPlan = { id: string; name: string; active: boolean };
 
 export const api = {
+  // 設定
   listMonitors: () => invoke<MonitorInfo[]>("list_monitors"),
   getConfig: () => invoke<Config>("get_config"),
   setDeckMonitor: (devicePath: string, name: string) => invoke<void>("set_deck_monitor", { devicePath, name }),
   setAutoDeck: (enabled: boolean) => invoke<void>("set_auto_deck", { enabled }),
-  setMoveGameWindows: (enabled: boolean) => invoke<void>("set_move_game_windows", { enabled }),
-  addCustomGame: (title: string, path: string) => invoke<void>("add_custom_game", { title, path }),
-  removeCustomGame: (id: string) => invoke<void>("remove_custom_game", { id }),
-  listGames: () => invoke<Game[]>("list_games"),
-  launchGame: (id: string) => invoke<void>("launch_game", { id }),
   deckStatus: () => invoke<DeckStatus>("deck_status"),
   deckEnter: () => invoke<void>("deck_enter"),
   deckExit: () => invoke<void>("deck_exit"),
-  showHome: () => invoke<void>("show_home"),
-  quickSetExpanded: (expanded: boolean) => invoke<void>("quick_set_expanded", { expanded }),
+  setFocusable: (focusable: boolean) => invoke<void>("set_focusable", { focusable }),
+  openTouchSetup: () => invoke<void>("open_touch_setup"),
+
+  // デッキ
+  getDeck: () => invoke<DeckData | null>("get_deck"),
+  saveDeck: (deck: DeckData) => invoke<void>("save_deck", { deck }),
+  runAction: (action: Action) => invoke<string | null>("run_action", { action }),
+  getStates: () => invoke<States>("get_states"),
+  listAudioOutputs: () => invoke<AudioDevice[]>("list_audio_outputs"),
+  getIcon: (target: string) => invoke<string | null>("get_icon", { target }),
+  listInstalledGames: () => invoke<InstalledGame[]>("list_installed_games"),
+
+  // システムパネル
   getVolume: () => invoke<Volume>("get_volume"),
   setVolume: (level: number) => invoke<void>("set_volume", { level }),
   setMute: (muted: boolean) => invoke<void>("set_mute", { muted }),
@@ -60,10 +59,6 @@ export const api = {
   setMode: (mode: DisplayMode) => invoke<void>("set_mode", { mode }),
   listPowerPlans: () => invoke<PowerPlan[]>("list_power_plans"),
   setPowerPlan: (id: string) => invoke<void>("set_power_plan", { id }),
-  openTouchSetup: () => invoke<void>("open_touch_setup"),
-  sendKeys: (keys: string[]) => invoke<string>("send_keys", { keys }),
-  sendText: (text: string) => invoke<void>("send_text", { text }),
-  setFocusable: (focusable: boolean) => invoke<void>("set_focusable", { focusable }),
 };
 
 /** 連続したスライダー操作をまとめて送る */

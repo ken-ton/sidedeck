@@ -19,33 +19,17 @@
         "minWidth": 640,
         "minHeight": 480,
         "center": true
-      },
-      {
-        "label": "quick",
-        "title": "win-deck クイック設定",
-        "url": "index.html",
-        "width": 72,
-        "height": 72,
-        "decorations": false,
-        "transparent": true,
-        "shadow": false,
-        "alwaysOnTop": true,
-        "skipTaskbar": true,
-        "resizable": false,
-        "visible": false
       }
     ],
     "security": {
-      "csp": null,
-      "assetProtocol": {
-        "enable": true,
-        "scope": []
-      }
+      "csp": null
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

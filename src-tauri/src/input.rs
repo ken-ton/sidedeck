@@ -32,6 +32,28 @@ fn vk_for(name: &str) -> Option<(VIRTUAL_KEY, bool)> {
         "down" => VK_DOWN,
         "left" => VK_LEFT,
         "right" => VK_RIGHT,
+        "printscreen" => VK_SNAPSHOT,
+        "pause" => VK_PAUSE,
+        "capslock" => VK_CAPITAL,
+        "numlock" => VK_NUMLOCK,
+        "scrolllock" => VK_SCROLL,
+        "contextmenu" => VK_APPS,
+        // 記号キー（US 配列の位置で指定。JIS 配列では刻印と違う記号になることがある）
+        "minus" => VK_OEM_MINUS,
+        "equal" => VK_OEM_PLUS,
+        "comma" => VK_OEM_COMMA,
+        "period" => VK_OEM_PERIOD,
+        "slash" => VK_OEM_2,
+        "backquote" => VK_OEM_3,
+        "semicolon" => VK_OEM_1,
+        "quote" => VK_OEM_7,
+        "bracketleft" => VK_OEM_4,
+        "bracketright" => VK_OEM_6,
+        "backslash" => VK_OEM_5,
+        "intlro" => VK_OEM_102,
+        s if s.starts_with("num") && s.len() == 4 && s.as_bytes()[3].is_ascii_digit() => {
+            VIRTUAL_KEY(VK_NUMPAD0.0 + (s.as_bytes()[3] - b'0') as u16)
+        }
         "media_play_pause" => return Some((VK_MEDIA_PLAY_PAUSE, true)),
         "media_next" => return Some((VK_MEDIA_NEXT_TRACK, true)),
         "media_prev" => return Some((VK_MEDIA_PREV_TRACK, true)),
@@ -118,66 +140,6 @@ pub fn send_text(text: &str) -> Result<(), String> {
         }
     }
     send(&inputs)
-}
-
-/// 前面ウィンドウのプロセス名と、管理者権限で動いているかを返す（診断用）。
-/// 権限が取れない場合は None（保護されたプロセスや、管理者権限のプロセスのことが多い）。
-pub fn foreground_info() -> (String, Option<bool>) {
-    use windows::Win32::Foundation::{CloseHandle, HANDLE};
-    use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
-    use windows::Win32::System::Threading::{OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION};
-    unsafe {
-        let hwnd = GetForegroundWindow();
-        let mut pid = 0u32;
-        GetWindowThreadProcessId(hwnd, Some(&mut pid));
-        let name = crate::window_mover::process_name(pid).unwrap_or_else(|| format!("pid {pid}"));
-        let elevated = (|| {
-            let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
-            let mut token = HANDLE::default();
-            let ok = OpenProcessToken(h, TOKEN_QUERY, &mut token).is_ok();
-            let _ = CloseHandle(h);
-            if !ok {
-                return None;
-            }
-            let mut e = TOKEN_ELEVATION::default();
-            let mut len = 0u32;
-            let r = GetTokenInformation(
-                token,
-                TokenElevation,
-                Some(&mut e as *mut _ as *mut _),
-                std::mem::size_of::<TOKEN_ELEVATION>() as u32,
-                &mut len,
-            );
-            let _ = CloseHandle(token);
-            r.ok()?;
-            Some(e.TokenIsElevated != 0)
-        })();
-        (name, elevated)
-    }
-}
-
-/// 自分（win-deck）が管理者権限で動いているか。
-pub fn self_elevated() -> bool {
-    use windows::Win32::Foundation::{CloseHandle, HANDLE};
-    use windows::Win32::Security::{GetTokenInformation, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
-    use windows::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
-    unsafe {
-        let mut token = HANDLE::default();
-        if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token).is_err() {
-            return false;
-        }
-        let mut e = TOKEN_ELEVATION::default();
-        let mut len = 0u32;
-        let r = GetTokenInformation(
-            token,
-            TokenElevation,
-            Some(&mut e as *mut _ as *mut _),
-            std::mem::size_of::<TOKEN_ELEVATION>() as u32,
-            &mut len,
-        );
-        let _ = CloseHandle(token);
-        r.is_ok() && e.TokenIsElevated != 0
-    }
 }
 
 /// NOACTIVATE を有効にしているウィンドウ（HWND の値）
