@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, Config, DeckStatus, MonitorInfo, PluginInfo } from "./api";
 import { DEFAULT_TOGGLE_SHORTCUT, type DeckData } from "./deck";
 import ShortcutField from "./ShortcutField";
@@ -229,7 +231,34 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
             {confirmReset ? "もう一度タップすると、すべてのボタンを初期状態に戻します" : "デッキを初期状態に戻す"}
           </button>
         </section>
+
+        <About onError={onError} />
       </aside>
     </div>
+  );
+}
+
+const REPOSITORY = "https://github.com/ken-ton/win-deck";
+
+function About({ onError }: { onError: (msg: string) => void }) {
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    getVersion().then(setVersion);
+  }, []);
+  const open = (url: string) => openUrl(url).catch((e) => onError(String(e)));
+
+  return (
+    <section className="about">
+      <h2>このアプリについて</h2>
+      <p>
+        <strong>win-deck</strong> <span className="about-version">{version ? `バージョン ${version}` : ""}</span>
+      </p>
+      <div className="chips wrap">
+        <button onClick={() => open(REPOSITORY)}>GitHub</button>
+        <button onClick={() => open(`${REPOSITORY}/releases/latest`)}>最新のリリース</button>
+        <button onClick={() => open(`${REPOSITORY}/blob/main/LICENSE`)}>ライセンス</button>
+      </div>
+      <p className="hint">© 2026 KT ・ MIT License</p>
+    </section>
   );
 }

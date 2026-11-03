@@ -795,3 +795,12 @@ button.danger-fill {
 .badge.status-error {
   background: color-mix(in srgb, var(--danger) 40%, transparent);
 }
+
+.about p {
+  margin: 6px 0;
+}
+.about-version {
+  margin-left: 8px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}

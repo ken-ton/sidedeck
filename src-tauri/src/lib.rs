@@ -515,7 +515,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&enter, &exit, &open, &quit])?;
     TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
-        .tooltip("win-deck")
+        .tooltip(format!("win-deck {}", app.package_info().version))
         .menu(&menu)
         .on_menu_event(|app, ev| match ev.id().as_ref() {
             "enter" => {
