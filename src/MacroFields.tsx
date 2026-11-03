@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import { Action, ACTION_LABELS, formatKeys, MacroStep, MEDIA_LABELS, MediaCommand, parseKeys } from "./deck";
+import { Action, ACTION_LABELS, formatKeys, MacroStep, MEDIA_LABELS, MediaCommand, parseKeys, WINDOW_LABELS, windowAction, WindowCommand } from "./deck";
 
 type MacroAction = Extract<Action, { type: "macro" }>;
 
@@ -20,7 +20,8 @@ function describe(s: MacroStep): string {
       return `待つ: ${(s.ms / 1000).toFixed(2)} 秒`;
     case "action": {
       const a = s.action;
-      const detail = a.type === "media" ? MEDIA_LABELS[a.command] : a.type === "launch" ? a.target : "";
+      const detail =
+        a.type === "media" ? MEDIA_LABELS[a.command] : a.type === "launch" ? a.target : a.type === "window" ? WINDOW_LABELS[a.command] + (a.app ? ` ${a.app}` : "") : "";
       return `操作: ${ACTION_LABELS[a.type]}${detail ? `（${detail}）` : ""}`;
     }
   }
@@ -99,7 +100,29 @@ function StepForm({ step, onChange }: { step: MacroStep; onChange: (s: MacroStep
         <button className={a.type === "audio_device" ? "on" : ""} onClick={() => set({ type: "audio_device", deviceIds: [] })}>
           出力デバイスを順に切替
         </button>
+        <button className={a.type === "window" ? "on" : ""} onClick={() => set(windowAction("focus"))}>
+          ウィンドウ操作
+        </button>
       </div>
+      {a.type === "window" && (
+        <>
+          <div className="chips wrap">
+            {(Object.keys(WINDOW_LABELS) as WindowCommand[])
+              .filter((c) => c !== "move_to")
+              .map((c) => (
+                <button key={c} className={a.command === c ? "on" : ""} onClick={() => set({ ...a, command: c })}>
+                  {WINDOW_LABELS[c]}
+                </button>
+              ))}
+          </div>
+          {a.command === "focus" && (
+            <label className="field">
+              <span>アプリ（プロセス名）</span>
+              <input value={a.app} placeholder="code.exe" onChange={(e) => set({ ...a, app: e.target.value.trim().toLowerCase() })} />
+            </label>
+          )}
+        </>
+      )}
       {a.type === "launch" && (
         <label className="field">
           <span>開くもの（パスか URL）</span>

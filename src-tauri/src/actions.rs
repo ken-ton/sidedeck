@@ -28,6 +28,19 @@ pub enum Action {
         #[serde(default = "one")]
         repeat: u32,
     },
+    /// command: focus / move_next / move_to / maximize / minimize
+    Window {
+        command: String,
+        /// focus の対象（小文字のプロセス名）
+        #[serde(default)]
+        app: String,
+        /// focus で起動していなかったときに開くもの
+        #[serde(default)]
+        launch: String,
+        /// move_to の移動先（モニターのデバイスパス）
+        #[serde(default)]
+        monitor: String,
+    },
 }
 
 fn one() -> u32 {
@@ -63,7 +76,7 @@ fn split_args(s: &str) -> Vec<String> {
     out
 }
 
-fn launch(app: &tauri::AppHandle, target: &str, args: &str) -> Result<(), String> {
+pub(crate) fn launch(app: &tauri::AppHandle, target: &str, args: &str) -> Result<(), String> {
     use tauri_plugin_opener::OpenerExt;
     let target = target.trim().trim_matches('"');
     if target.is_empty() {
@@ -110,6 +123,18 @@ pub fn run(app: &tauri::AppHandle, action: Action, button_id: Option<String>) ->
             let id = button_id.ok_or("マクロの識別子がありません")?;
             Ok(crate::macros::toggle(app, id, steps, repeat))
         }
+        Action::Window { command, app: name, launch, monitor } => match command.as_str() {
+            "focus" => crate::winops::focus_app(app, &name, &launch),
+            "move_next" => {
+                use tauri::Manager;
+                let deck = app.state::<crate::AppState>().config.lock().unwrap().deck_monitor.clone();
+                crate::winops::move_foreground(None, deck.as_deref())
+            }
+            "move_to" => crate::winops::move_foreground(Some(&monitor), None),
+            "maximize" => crate::winops::toggle_maximize(),
+            "minimize" => crate::winops::minimize(),
+            other => Err(format!("未対応のウィンドウ操作です: {other}")),
+        },
     }
 }
 

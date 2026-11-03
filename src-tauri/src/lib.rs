@@ -8,6 +8,7 @@ mod icons;
 mod input;
 mod macros;
 mod system;
+mod winops;
 
 use std::path::PathBuf;
 use std::sync::Mutex;

@@ -76,20 +76,10 @@ pub fn spawn_watcher(app: AppHandle) {
 
 pub fn list_window_apps() -> Vec<WindowApp> {
     unsafe extern "system" fn cb(h: HWND, data: LPARAM) -> BOOL {
-        unsafe {
-            let out = &mut *(data.0 as *mut Vec<HWND>);
-            let ex = GetWindowLongPtrW(h, GWL_EXSTYLE) as u32;
-            let owned = GetWindow(h, GW_OWNER).is_ok_and(|o| !o.is_invalid());
-            // 最小化されているアプリも候補に含める
-            if IsWindowVisible(h).as_bool()
-                && ex & WS_EX_TOOLWINDOW.0 == 0
-                && !owned
-                && GetWindowTextLengthW(h) > 0
-            {
-                out.push(h);
-            }
-            BOOL(1)
+        if crate::winops::is_app_window(h) {
+            unsafe { (*(data.0 as *mut Vec<HWND>)).push(h) };
         }
+        BOOL(1)
     }
     let mut hwnds: Vec<HWND> = Vec::new();
     unsafe {

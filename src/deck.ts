@@ -2,6 +2,8 @@ export type Icon = { kind: "emoji"; value: string } | { kind: "image"; src: stri
 
 export type MediaCommand = "play_pause" | "next" | "prev" | "stop" | "volume_up" | "volume_down" | "mute";
 
+export type WindowCommand = "focus" | "move_next" | "move_to" | "maximize" | "minimize";
+
 export type MacroStep =
   | { type: "keys"; keys: string[] }
   | { type: "key_down"; keys: string[] }
@@ -21,7 +23,9 @@ export type Action =
   | { type: "page"; pageId: string }
   | { type: "system_panel" }
   /** repeat が 0 なら停止されるまで繰り返す */
-  | { type: "macro"; steps: MacroStep[]; repeat: number };
+  | { type: "macro"; steps: MacroStep[]; repeat: number }
+  /** app は小文字のプロセス名、monitor はモニターのデバイスパス */
+  | { type: "window"; command: WindowCommand; app: string; launch: string; monitor: string };
 
 export type ActionType = Action["type"];
 
@@ -67,7 +71,18 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   page: "フォルダを開く",
   system_panel: "システムパネル",
   macro: "マクロ",
+  window: "ウィンドウ操作",
 };
+
+export const WINDOW_LABELS: Record<WindowCommand, string> = {
+  focus: "アプリを前面に出す",
+  move_next: "次のモニターへ移動",
+  move_to: "指定のモニターへ移動",
+  maximize: "最大化の切替",
+  minimize: "最小化",
+};
+
+export const windowAction = (command: WindowCommand): Action => ({ type: "window", command, app: "", launch: "", monitor: "" });
 
 export const MEDIA_LABELS: Record<MediaCommand, string> = {
   play_pause: "再生 / 一時停止",
@@ -97,6 +112,8 @@ export function emptyAction(type: ActionType): Action {
       return { type, pageId: "" };
     case "macro":
       return { type, steps: [], repeat: 1 };
+    case "window":
+      return windowAction("move_next");
     default:
       return { type } as Action;
   }
