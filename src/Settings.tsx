@@ -56,7 +56,7 @@ export default function Settings({ onGamesChanged, onError }: Props) {
     <main className="settings">
       <section>
         <h2>Deck 用モニター</h2>
-        <p className="hint">MD-14T を選んでください。Deck モード中はこのモニターがプライマリになり、ゲームもここに表示されます。</p>
+        <p className="hint">MD-14T を選んでください。Deck モード中は、このモニターにランチャーを全画面で表示します（プライマリは切り替えません）。</p>
         <div className="monitor-list">
           {monitors.map((m) => {
             const selected = m.devicePath === config.deckMonitor;
@@ -90,7 +90,27 @@ export default function Settings({ onGamesChanged, onError }: Props) {
             }}
           />
         </label>
-        <p className="hint">取り外したとき、または Deck モードを終了したときは、元の画面配置に戻ります。</p>
+        <p className="hint">モニターを取り外すと Deck モードを終了します。</p>
+      </section>
+
+      <section>
+        <h2>ゲームウィンドウ</h2>
+        <label className="switch-row">
+          <span>起動したゲームを Deck 用モニターへ移動する</span>
+          <input
+            type="checkbox"
+            className="switch"
+            checked={config.moveGameWindows}
+            onChange={async (e) => {
+              await api.setMoveGameWindows(e.target.checked);
+              reload();
+            }}
+          />
+        </label>
+        <p className="hint">
+          起動から 2 分間、前面に出たゲームのウィンドウを移動します。ボーダーレス全画面のゲームは画面いっぱいに合わせます。
+          排他フルスクリーンのゲームは移動できないことがあるので、ゲーム側でボーダーレスかウィンドウモードを選んでください。
+        </p>
       </section>
 
       <section>

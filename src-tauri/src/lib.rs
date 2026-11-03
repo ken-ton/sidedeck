@@ -2,6 +2,7 @@ mod config;
 mod display;
 mod games;
 mod system;
+mod window_mover;
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -121,23 +122,8 @@ fn place_quick(app: &AppHandle, expanded: bool) {
 // ---------------------------------------------------------------- Deck モード
 
 fn enter_deck(app: &AppHandle) -> Result<(), String> {
+    // プライマリや画面配置は変更しない。ランチャーを Deck モニター上に置くだけ。
     let st = app.state::<AppState>();
-    let mon = st.deck_monitor()?;
-
-    let already = st.deck.lock().unwrap().active;
-    if !already {
-        let mut cfg = st.config.lock().unwrap();
-        if cfg.saved_layout.is_none() {
-            cfg.saved_layout = Some(display::list_monitors());
-        }
-        cfg.save(&st.config_path);
-    }
-
-    // ゲームが Deck モニター側で起動するよう、プライマリにする
-    if !mon.primary {
-        display::make_primary(&mon.gdi_name)?;
-        std::thread::sleep(Duration::from_millis(600));
-    }
     let mon = st.deck_monitor()?;
     {
         let mut d = st.deck.lock().unwrap();
@@ -155,6 +141,8 @@ fn enter_deck(app: &AppHandle) -> Result<(), String> {
 
 fn exit_deck(app: &AppHandle) -> Result<(), String> {
     let st = app.state::<AppState>();
+    window_mover::cancel();
+    // 旧バージョンで変更した配置が残っていれば戻す
     let saved = st.config.lock().unwrap().saved_layout.clone();
     let result = match &saved {
         Some(layout) => display::restore_layout(layout),
@@ -223,6 +211,7 @@ struct ConfigView {
     deck_monitor: Option<String>,
     deck_monitor_name: Option<String>,
     auto_deck: bool,
+    move_game_windows: bool,
     custom_games: Vec<CustomGame>,
 }
 
@@ -233,8 +222,16 @@ async fn get_config(app: AppHandle) -> ConfigView {
         deck_monitor: c.deck_monitor,
         deck_monitor_name: c.deck_monitor_name,
         auto_deck: c.auto_deck,
+        move_game_windows: c.move_game_windows,
         custom_games: c.custom_games,
     }
+}
+
+#[tauri::command]
+async fn set_move_game_windows(app: AppHandle, enabled: bool) {
+    let st = app.state::<AppState>();
+    st.config.lock().unwrap().move_game_windows = enabled;
+    st.save();
 }
 
 #[tauri::command]
@@ -288,7 +285,14 @@ async fn launch_game(app: AppHandle, id: String) -> CmdResult<()> {
         .find(|g| g.id == id)
         .ok_or("ゲームが見つかりません")?;
     games::launch(&app, &game)?;
-    if app.state::<AppState>().deck.lock().unwrap().active {
+    let st = app.state::<AppState>();
+    let active = st.deck.lock().unwrap().active;
+    if active && st.config.lock().unwrap().move_game_windows {
+        if let Ok(mon) = st.deck_monitor() {
+            window_mover::follow_launch(mon.gdi_name, Duration::from_secs(120));
+        }
+    }
+    if active {
         // ゲームが前面に出るようにランチャーを隠す（クイックボタンは残る）
         if let Some(win) = app.get_webview_window("main") {
             let _ = win.hide();
@@ -530,6 +534,7 @@ pub fn run() {
             get_config,
             set_deck_monitor,
             set_auto_deck,
+            set_move_game_windows,
             add_custom_game,
             remove_custom_game,
             list_games,
@@ -577,3 +582,4 @@ mod smoke {
         }
     }
 }
+

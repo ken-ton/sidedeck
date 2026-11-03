@@ -42,39 +42,44 @@ pub fn from_wide(w: &[u16]) -> String {
     String::from_utf16_lossy(&w[..end])
 }
 
-/// アクティブな表示パスごとに (GDI 名, 表示名, デバイスパス) を返す。
-fn active_targets() -> Vec<(String, String, String)> {
-    let mut out = Vec::new();
+/// CCD API で現在アクティブな表示パスとモードを取得する。
+fn query_active() -> Result<(Vec<DISPLAYCONFIG_PATH_INFO>, Vec<DISPLAYCONFIG_MODE_INFO>), String> {
     unsafe {
         let mut np = 0u32;
         let mut nm = 0u32;
-        if GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &mut np, &mut nm) != ERROR_SUCCESS {
-            return out;
+        let r = GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &mut np, &mut nm);
+        if r != ERROR_SUCCESS {
+            return Err(format!("GetDisplayConfigBufferSizes 失敗 (code {})", r.0));
         }
         let mut paths = vec![DISPLAYCONFIG_PATH_INFO::default(); np as usize];
         let mut modes = vec![DISPLAYCONFIG_MODE_INFO::default(); nm as usize];
-        if QueryDisplayConfig(
-            QDC_ONLY_ACTIVE_PATHS,
-            &mut np,
-            paths.as_mut_ptr(),
-            &mut nm,
-            modes.as_mut_ptr(),
-            None,
-        ) != ERROR_SUCCESS
-        {
-            return out;
+        let r = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, &mut np, paths.as_mut_ptr(), &mut nm, modes.as_mut_ptr(), None);
+        if r != ERROR_SUCCESS {
+            return Err(format!("QueryDisplayConfig 失敗 (code {})", r.0));
         }
         paths.truncate(np as usize);
+        modes.truncate(nm as usize);
+        Ok((paths, modes))
+    }
+}
 
+/// パスのソース（GDI 名、例: `\\.\DISPLAY1`）を取得する。
+fn source_gdi_name(p: &DISPLAYCONFIG_PATH_INFO) -> Option<String> {
+    let mut src = DISPLAYCONFIG_SOURCE_DEVICE_NAME::default();
+    src.header.r#type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
+    src.header.size = std::mem::size_of::<DISPLAYCONFIG_SOURCE_DEVICE_NAME>() as u32;
+    src.header.adapterId = p.sourceInfo.adapterId;
+    src.header.id = p.sourceInfo.id;
+    (unsafe { DisplayConfigGetDeviceInfo(&mut src.header) } == 0).then(|| from_wide(&src.viewGdiDeviceName))
+}
+
+/// アクティブな表示パスごとに (GDI 名, 表示名, デバイスパス) を返す。
+fn active_targets() -> Vec<(String, String, String)> {
+    let mut out = Vec::new();
+    let Ok((paths, _)) = query_active() else { return out };
+    unsafe {
         for p in &paths {
-            let mut src = DISPLAYCONFIG_SOURCE_DEVICE_NAME::default();
-            src.header.r#type = DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME;
-            src.header.size = std::mem::size_of::<DISPLAYCONFIG_SOURCE_DEVICE_NAME>() as u32;
-            src.header.adapterId = p.sourceInfo.adapterId;
-            src.header.id = p.sourceInfo.id;
-            if DisplayConfigGetDeviceInfo(&mut src.header) != 0 {
-                continue;
-            }
+            let Some(gdi) = source_gdi_name(p) else { continue };
 
             let mut tgt = DISPLAYCONFIG_TARGET_DEVICE_NAME::default();
             tgt.header.r#type = DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME;
@@ -84,7 +89,7 @@ fn active_targets() -> Vec<(String, String, String)> {
             let ok = DisplayConfigGetDeviceInfo(&mut tgt.header) == 0;
 
             out.push((
-                from_wide(&src.viewGdiDeviceName),
+                gdi,
                 if ok { from_wide(&tgt.monitorFriendlyDeviceName) } else { String::new() },
                 if ok { from_wide(&tgt.monitorDevicePath) } else { String::new() },
             ));
@@ -137,43 +142,37 @@ pub fn list_monitors() -> Vec<MonitorInfo> {
 }
 
 /// (GDI 名, x, y, プライマリか) の配置を一括で適用する。
+///
+/// 旧 API の `ChangeDisplaySettingsEx` は環境によって DISP_CHANGE_FAILED になるため、
+/// 設定アプリと同じ CCD API（SetDisplayConfig）でソースモードの位置を書き換える。
+/// CCD ではデスクトップ座標 (0,0) にあるソースがプライマリになる。
 fn apply_layout(entries: &[(String, i32, i32, bool)]) -> Result<(), String> {
-    for (gdi, x, y, primary) in entries {
-        let mut dm = current_mode(gdi).ok_or_else(|| format!("{gdi} の現在の設定を取得できません"))?;
-        dm.Anonymous1.Anonymous2.dmPosition = POINTL { x: *x, y: *y };
-        dm.dmFields = DM_POSITION;
-        let mut flags = CDS_UPDATEREGISTRY | CDS_NORESET;
-        if *primary {
-            flags |= CDS_SET_PRIMARY;
-        }
-        let name = to_wide(gdi);
-        let r = unsafe { ChangeDisplaySettingsExW(PCWSTR(name.as_ptr()), Some(&dm), None, flags, None) };
-        if r != DISP_CHANGE_SUCCESSFUL {
-            return Err(format!("{gdi} の配置変更に失敗しました (code {})", r.0));
-        }
+    if !entries.iter().any(|(_, x, y, p)| *p && *x == 0 && *y == 0) {
+        return Err("プライマリにするモニターが (0,0) にありません".into());
     }
-    let r = unsafe { ChangeDisplaySettingsExW(PCWSTR::null(), None, None, CDS_TYPE(0), None) };
-    if r != DISP_CHANGE_SUCCESSFUL {
-        return Err(format!("画面配置の適用に失敗しました (code {})", r.0));
+    let (paths, mut modes) = query_active()?;
+    let mut touched = HashSet::new();
+    for p in &paths {
+        let Some(gdi) = source_gdi_name(p) else { continue };
+        let Some((_, x, y, _)) = entries.iter().find(|e| e.0 == gdi) else { continue };
+        let idx = unsafe { p.sourceInfo.Anonymous.modeInfoIdx } as usize;
+        let Some(mode) = modes.get_mut(idx) else { continue };
+        if mode.infoType != DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE || !touched.insert(idx) {
+            continue;
+        }
+        mode.Anonymous.sourceMode.position = POINTL { x: *x, y: *y };
+    }
+    let r = unsafe {
+        SetDisplayConfig(
+            Some(&paths),
+            Some(&modes),
+            SDC_APPLY | SDC_USE_SUPPLIED_DISPLAY_CONFIG | SDC_ALLOW_CHANGES | SDC_SAVE_TO_DATABASE,
+        )
+    };
+    if r != 0 {
+        return Err(format!("画面配置の適用に失敗しました (SetDisplayConfig code {r})"));
     }
     Ok(())
-}
-
-/// 指定モニターをプライマリにする。他のモニターは相対位置を保ったまま平行移動する。
-pub fn make_primary(gdi: &str) -> Result<(), String> {
-    let mons = list_monitors();
-    let t = mons
-        .iter()
-        .find(|m| m.gdi_name == gdi)
-        .ok_or_else(|| format!("{gdi} が見つかりません"))?;
-    if t.primary {
-        return Ok(());
-    }
-    let entries: Vec<_> = mons
-        .iter()
-        .map(|m| (m.gdi_name.clone(), m.x - t.x, m.y - t.y, m.gdi_name == gdi))
-        .collect();
-    apply_layout(&entries)
 }
 
 /// 保存しておいた配置に戻す。GDI 名は変わり得るのでデバイスパスで対応付ける。
@@ -232,7 +231,7 @@ pub fn set_mode(gdi: &str, mode: DisplayMode) -> Result<(), String> {
 
 // ---------------------------------------------------------------- 明るさ
 
-fn hmonitor_for(gdi: &str) -> Option<HMONITOR> {
+pub fn hmonitor_for(gdi: &str) -> Option<HMONITOR> {
     unsafe extern "system" fn cb(h: HMONITOR, _: HDC, _: *mut RECT, data: LPARAM) -> BOOL {
         unsafe { (*(data.0 as *mut Vec<HMONITOR>)).push(h) };
         BOOL(1)

@@ -12,7 +12,7 @@ pub struct CustomGame {
     pub path: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Default, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Config {
     /// Deck 用モニター（MD-14T）のデバイスパス
@@ -21,9 +21,25 @@ pub struct Config {
     pub deck_monitor_name: Option<String>,
     /// モニター接続時に自動で Deck モードに入る
     pub auto_deck: bool,
+    /// ゲーム起動後、そのウィンドウを Deck モニターへ移動する
+    pub move_game_windows: bool,
     pub custom_games: Vec<CustomGame>,
-    /// Deck モードに入る前の画面配置。異常終了時の復元にも使う。
+    /// 旧バージョン（プライマリを切り替えていた頃）の画面配置。
+    /// 残っていれば起動時に復元して消す。
     pub saved_layout: Option<Vec<MonitorInfo>>,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            deck_monitor: None,
+            deck_monitor_name: None,
+            auto_deck: false,
+            move_game_windows: true,
+            custom_games: Vec::new(),
+            saved_layout: None,
+        }
+    }
 }
 
 impl Config {

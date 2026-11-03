@@ -18,6 +18,7 @@ export type Config = {
   deckMonitor: string | null;
   deckMonitorName: string | null;
   autoDeck: boolean;
+  moveGameWindows: boolean;
   customGames: CustomGame[];
 };
 
@@ -40,6 +41,7 @@ export const api = {
   getConfig: () => invoke<Config>("get_config"),
   setDeckMonitor: (devicePath: string, name: string) => invoke<void>("set_deck_monitor", { devicePath, name }),
   setAutoDeck: (enabled: boolean) => invoke<void>("set_auto_deck", { enabled }),
+  setMoveGameWindows: (enabled: boolean) => invoke<void>("set_move_game_windows", { enabled }),
   addCustomGame: (title: string, path: string) => invoke<void>("add_custom_game", { title, path }),
   removeCustomGame: (id: string) => invoke<void>("remove_custom_game", { id }),
   listGames: () => invoke<Game[]>("list_games"),
