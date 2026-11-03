@@ -4,6 +4,14 @@ export type Icon = { kind: "emoji"; value: string } | { kind: "image"; src: stri
 
 export type MediaCommand = "play_pause" | "next" | "prev" | "stop" | "volume_up" | "volume_down" | "mute";
 
+export type MacroStep =
+  | { type: "keys"; keys: string[] }
+  | { type: "key_down"; keys: string[] }
+  | { type: "key_up"; keys: string[] }
+  | { type: "text"; text: string }
+  | { type: "wait"; ms: number }
+  | { type: "action"; action: Action };
+
 export type Action =
   | { type: "none" }
   | { type: "launch"; target: string; args: string }
@@ -13,7 +21,9 @@ export type Action =
   | { type: "mic_mute" }
   | { type: "audio_device"; deviceIds: string[] }
   | { type: "page"; pageId: string }
-  | { type: "system_panel" };
+  | { type: "system_panel" }
+  /** repeat が 0 なら停止されるまで繰り返す */
+  | { type: "macro"; steps: MacroStep[]; repeat: number };
 
 export type ActionType = Action["type"];
 
@@ -58,6 +68,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   audio_device: "出力デバイスの切替",
   page: "フォルダを開く",
   system_panel: "システムパネル",
+  macro: "マクロ",
 };
 
 export const MEDIA_LABELS: Record<MediaCommand, string> = {
@@ -86,6 +97,8 @@ export function emptyAction(type: ActionType): Action {
       return { type, deviceIds: [] };
     case "page":
       return { type, pageId: "" };
+    case "macro":
+      return { type, steps: [], repeat: 1 };
     default:
       return { type } as Action;
   }

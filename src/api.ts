@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Action, DeckData } from "./deck";
+import type { Action, DeckData, MacroStep } from "./deck";
 
 export type MonitorInfo = {
   gdiName: string;
@@ -44,7 +44,9 @@ export const api = {
   // デッキ
   getDeck: () => invoke<DeckData | null>("get_deck"),
   saveDeck: (deck: DeckData) => invoke<void>("save_deck", { deck }),
-  runAction: (action: Action) => invoke<string | null>("run_action", { action }),
+  runAction: (action: Action, buttonId?: string) => invoke<string | null>("run_action", { action, buttonId }),
+  startKeyRecording: () => invoke<void>("start_key_recording"),
+  stopKeyRecording: (keepTiming: boolean) => invoke<MacroStep[]>("stop_key_recording", { keepTiming }),
   getStates: () => invoke<States>("get_states"),
   listAudioOutputs: () => invoke<AudioDevice[]>("list_audio_outputs"),
   getIcon: (target: string) => invoke<string | null>("get_icon", { target }),

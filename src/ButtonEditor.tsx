@@ -18,6 +18,7 @@ import {
   uid,
 } from "./deck";
 import ButtonFace from "./ButtonFace";
+import MacroFields from "./MacroFields";
 
 /** 新しいフォルダを作るときの仮の pageId */
 const NEW_FOLDER = "__new__";
@@ -205,6 +206,9 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
     if (a.type === "launch" && !a.target.trim()) return onError("開くものを指定してください");
     if (a.type === "hotkey" && !a.keys.some((k) => !(MODIFIERS as readonly string[]).includes(k))) return onError("キーを指定してください");
     if (a.type === "text" && !a.text) return onError("入力する文字を指定してください");
+    if (a.type === "macro" && a.steps.length === 0) return onError("ステップを 1 つ以上追加してください");
+    if (a.type === "macro" && a.steps.some((s) => (s.type === "keys" || s.type === "key_down" || s.type === "key_up") && s.keys.length === 0))
+      return onError("キーが未設定のステップがあります");
     let folder: Page | null = null;
     let button = b;
     if (a.type === "page" && (a.pageId === NEW_FOLDER || !a.pageId)) {
@@ -328,6 +332,7 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
               </button>
             </div>
           )}
+          {b.action.type === "macro" && <MacroFields action={b.action} onChange={setAction} onError={onError} />}
           {b.action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
         </section>
 

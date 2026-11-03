@@ -4,9 +4,9 @@
 use std::path::Path;
 use std::process::Command;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Action {
     /// アプリ・ファイル・フォルダ・URL を開く
@@ -28,6 +28,16 @@ pub enum Action {
         #[serde(default, rename = "deviceIds")]
         device_ids: Vec<String>,
     },
+    /// ステップを順に実行する。`repeat` が 0 なら停止されるまで繰り返す
+    Macro {
+        steps: Vec<crate::macros::Step>,
+        #[serde(default = "one")]
+        repeat: u32,
+    },
+}
+
+fn one() -> u32 {
+    1
 }
 
 /// 引数文字列を空白で分割する（ダブルクォートで囲んだ部分は 1 つの引数）。
@@ -84,7 +94,8 @@ fn launch(app: &tauri::AppHandle, target: &str, args: &str) -> Result<(), String
 }
 
 /// 操作を実行する。表示用のメッセージがあれば返す。
-pub fn run(app: &tauri::AppHandle, action: Action) -> Result<Option<String>, String> {
+/// `button_id` はマクロの実行・停止の切り替えに使う。
+pub fn run(app: &tauri::AppHandle, action: Action, button_id: Option<String>) -> Result<Option<String>, String> {
     match action {
         Action::Launch { target, args } => launch(app, &target, &args).map(|_| None),
         Action::Hotkey { keys } => crate::input::send_keys(&keys).map(|_| None),
@@ -105,6 +116,10 @@ pub fn run(app: &tauri::AppHandle, action: Action) -> Result<Option<String>, Str
         Action::MicMute => crate::audio::toggle_mic()
             .map(|muted| Some(if muted { "マイク: ミュート" } else { "マイク: オン" }.to_string())),
         Action::AudioDevice { device_ids } => crate::audio::cycle_output(&device_ids).map(|name| Some(format!("出力: {name}"))),
+        Action::Macro { steps, repeat } => {
+            let id = button_id.ok_or("マクロの識別子がありません")?;
+            Ok(crate::macros::toggle(app, id, steps, repeat))
+        }
     }
 }
 

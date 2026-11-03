@@ -6,6 +6,7 @@ mod foreground;
 mod games;
 mod icons;
 mod input;
+mod macros;
 mod system;
 
 use std::path::PathBuf;
@@ -239,8 +240,18 @@ async fn save_deck(app: AppHandle, deck: serde_json::Value) {
 }
 
 #[tauri::command]
-async fn run_action(app: AppHandle, action: actions::Action) -> CmdResult<Option<String>> {
-    actions::run(&app, action)
+async fn run_action(app: AppHandle, action: actions::Action, button_id: Option<String>) -> CmdResult<Option<String>> {
+    actions::run(&app, action, button_id)
+}
+
+#[tauri::command]
+async fn start_key_recording() -> CmdResult<()> {
+    macros::start_recording()
+}
+
+#[tauri::command]
+async fn stop_key_recording(keep_timing: bool) -> Vec<macros::Step> {
+    macros::stop_recording(keep_timing)
 }
 
 /// ボタンの表示に使う状態（マイクのミュート、既定の出力デバイス）
@@ -472,6 +483,8 @@ pub fn run() {
             get_deck,
             save_deck,
             run_action,
+            start_key_recording,
+            stop_key_recording,
             get_states,
             list_audio_outputs,
             get_icon,

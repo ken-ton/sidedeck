@@ -108,18 +108,59 @@ fn send(inputs: &[INPUT]) -> Result<(), String> {
     Ok(())
 }
 
+fn resolve(keys: &[String]) -> Result<Vec<(VIRTUAL_KEY, bool)>, String> {
+    keys.iter()
+        .map(|k| vk_for(k).ok_or_else(|| format!("未対応のキーです: {k}")))
+        .collect()
+}
+
+pub fn key_down(keys: &[String]) -> Result<(), String> {
+    let inputs: Vec<_> = resolve(keys)?.iter().map(|&(vk, m)| key_input(vk, m, false)).collect();
+    send(&inputs)
+}
+
+pub fn key_up(keys: &[String]) -> Result<(), String> {
+    let inputs: Vec<_> = resolve(keys)?.iter().rev().map(|&(vk, m)| key_input(vk, m, true)).collect();
+    send(&inputs)
+}
+
 /// `["ctrl", "shift", "s"]` のような組み合わせを押して離す。
 pub fn send_keys(keys: &[String]) -> Result<(), String> {
-    let vks: Vec<_> = keys
-        .iter()
-        .map(|k| vk_for(k).ok_or_else(|| format!("未対応のキーです: {k}")))
-        .collect::<Result<_, _>>()?;
-    let down: Vec<_> = vks.iter().map(|&(vk, m)| key_input(vk, m, false)).collect();
-    let up: Vec<_> = vks.iter().rev().map(|&(vk, m)| key_input(vk, m, true)).collect();
-    send(&down)?;
+    key_down(keys)?;
     // ゲームはフレーム単位で入力を読むので、押している時間を少し取る
     std::thread::sleep(Duration::from_millis(40));
-    send(&up)
+    key_up(keys)
+}
+
+/// 仮想キーコードを、`vk_for` が受け付けるキー名に戻す（記録用）。
+pub fn name_for_vk(vk: u16) -> Option<String> {
+    let v = VIRTUAL_KEY(vk);
+    let fixed = match v {
+        VK_LCONTROL | VK_RCONTROL | VK_CONTROL => Some("ctrl"),
+        VK_LSHIFT | VK_RSHIFT | VK_SHIFT => Some("shift"),
+        VK_LMENU | VK_RMENU | VK_MENU => Some("alt"),
+        VK_LWIN | VK_RWIN => Some("win"),
+        _ => None,
+    };
+    if let Some(n) = fixed {
+        return Some(n.into());
+    }
+    if (b'A' as u16..=b'Z' as u16).contains(&vk) || (b'0' as u16..=b'9' as u16).contains(&vk) {
+        return Some((vk as u8 as char).to_ascii_lowercase().to_string());
+    }
+    if (VK_F1.0..=VK_F24.0).contains(&vk) {
+        return Some(format!("f{}", vk - VK_F1.0 + 1));
+    }
+    if (VK_NUMPAD0.0..=VK_NUMPAD9.0).contains(&vk) {
+        return Some(format!("num{}", vk - VK_NUMPAD0.0));
+    }
+    const NAMED: &[&str] = &[
+        "space", "enter", "tab", "esc", "backspace", "delete", "insert", "home", "end", "pageup", "pagedown", "up",
+        "down", "left", "right", "printscreen", "pause", "capslock", "numlock", "scrolllock", "contextmenu", "minus",
+        "equal", "comma", "period", "slash", "backquote", "semicolon", "quote", "bracketleft", "bracketright",
+        "backslash", "intlro",
+    ];
+    NAMED.iter().find(|n| vk_for(n).is_some_and(|(x, _)| x == v)).map(|n| n.to_string())
 }
 
 /// 文字列をそのまま入力する（Unicode 入力。ゲームには効かないことが多い）。

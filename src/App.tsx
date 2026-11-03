@@ -131,6 +131,7 @@ export default function App() {
   const [outputs, setOutputs] = useState<AudioDevice[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ id: string; ok: boolean } | null>(null);
+  const [runningMacros, setRunningMacros] = useState<Set<string>>(new Set());
   /** 最後に前面にあったアプリ（win-deck 自身は含まない） */
   const [foreground, setForeground] = useState<WindowApp | null>(null);
   /** 自動切替中なら、切替先のページと、戻り先のページ履歴 */
@@ -159,6 +160,16 @@ export default function App() {
       listen<DeckStatus>("deck-status", (e) => setStatus(e.payload)),
       listen<string>("deck-error", (e) => showToast(e.payload)),
       listen<WindowApp>("foreground-app", (e) => setForeground(e.payload)),
+      listen<{ id: string; running: boolean; error: string | null }>("macro-state", (e) => {
+        const { id, running, error } = e.payload;
+        setRunningMacros((prev) => {
+          const next = new Set(prev);
+          if (running) next.add(id);
+          else next.delete(id);
+          return next;
+        });
+        if (error) showToast(`マクロが止まりました: ${error}`);
+      }),
     ];
     return () => un.forEach((p) => p.then((f) => f()));
   }, [showToast]);
@@ -229,7 +240,7 @@ export default function App() {
     if (a.type === "system_panel") return setOverlay("system");
     if (!runsInBackend(a)) return;
     try {
-      const msg = await api.runAction(a);
+      const msg = await api.runAction(a, b.id);
       setFlash({ id: b.id, ok: true });
       if (msg) showToast(msg);
     } catch (e) {
@@ -297,6 +308,7 @@ export default function App() {
     if (a.type === "mic_mute" && states.micMuted) return "ミュート中";
     if (a.type === "audio_device" && a.deviceIds.length !== 1) return outputs.find((d) => d.id === states.defaultOutput)?.name ?? null;
     if (a.type === "page") return "📁";
+    if (a.type === "macro") return runningMacros.has(b.id) ? "実行中…" : null;
     return null;
   };
   const classFor = (b: DeckButton) => {
@@ -306,6 +318,7 @@ export default function App() {
     if (a.type === "audio_device" && a.deviceIds.length === 1 && a.deviceIds[0] === states.defaultOutput) c.push("active");
     if (flash?.id === b.id) c.push(flash.ok ? "fired" : "failed");
     if (moving === b.id) c.push("moving");
+    if (runningMacros.has(b.id)) c.push("running");
     return c.join(" ");
   };
 
