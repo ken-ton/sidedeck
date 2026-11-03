@@ -112,6 +112,27 @@ cargo test -- --ignored --nocapture       # 実機のモニター・音声デバ
 2. `v<バージョン>` のタグ（例: `v0.2.3`）を付けて push します。
 3. GitHub Actions がテストとビルドを行い、インストーラー付きのリリースを作成します。タグとバージョンが一致しないときは失敗します。
 
+## Code signing policy
+
+> 署名は現在 SignPath Foundation に申請中です。承認されるまで、リリースのインストーラーには署名がありません。
+
+Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+
+Only release builds produced by the [Release workflow](.github/workflows/release.yml) on GitHub-hosted runners, from tags in this repository, are submitted for signing. Every signing request is approved manually.
+
+Team roles:
+
+- Committers and reviewers: [ken-ton](https://github.com/ken-ton)
+- Approvers: [ken-ton](https://github.com/ken-ton)
+
+### Privacy policy
+
+This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+
+- win-deck has no telemetry and does not check for updates by itself. It opens URLs (such as the links in Settings, or `https://` and `steam://` targets assigned to buttons) only when the user taps them.
+- Plugins are separate programs that the user installs; they are not part of this program and are covered by their own policies.
+- win-deck renders its UI with Microsoft Edge WebView2, which is covered by the [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement).
+
 ## ライセンス
 
 [MIT](LICENSE)

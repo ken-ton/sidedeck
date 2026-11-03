@@ -51,5 +51,7 @@ jobs:
           releaseBody: |
             Windows 用のインストーラー（`win-deck_<バージョン>_x64-setup.exe`）をダウンロードして実行してください。
             インストーラーには署名がないため、Windows SmartScreen の警告が表示されることがあります。
+
+            [Code signing policy](https://github.com/ken-ton/win-deck#code-signing-policy)
           releaseDraft: false
           prerelease: false
