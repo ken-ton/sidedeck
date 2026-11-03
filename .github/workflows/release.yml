@@ -1,0 +1,55 @@
+name: Release
+
+# v0.2.3 のようなタグを push すると、インストーラーを作って GitHub Releases に公開する
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # タグとアプリのバージョンがずれたまま公開しないように
+      - name: Check that the tag matches the app version
+        shell: pwsh
+        run: |
+          $version = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ("v$version" -ne "${{ github.ref_name }}") {
+            throw "タグ ${{ github.ref_name }} と tauri.conf.json のバージョン $version が一致しません"
+          }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        working-directory: src-tauri
+        run: cargo test --locked
+
+      - name: Build the installer and create the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: win-deck ${{ github.ref_name }}
+          releaseBody: |
+            Windows 用のインストーラー（`win-deck_<バージョン>_x64-setup.exe`）をダウンロードして実行してください。
+            インストーラーには署名がないため、Windows SmartScreen の警告が表示されることがあります。
+          releaseDraft: false
+          prerelease: false

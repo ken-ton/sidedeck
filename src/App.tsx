@@ -188,6 +188,8 @@ export default function App() {
       listen<string>("shortcut", (e) => runShortcut.current(e.payload)),
       listen<PluginButtonState>("plugin-state", (e) => {
         const { context, ...patch } = e.payload;
+        // 外部 URL を読み込ませない（CSP でも止めているが、表示側でも data: URL だけにする）
+        if (typeof patch.icon === "string" && !patch.icon.startsWith("data:image/")) patch.icon = null;
         setPluginStates((prev) => ({ ...prev, [context]: { ...prev[context], ...patch, context } }));
       }),
       listen<{ context: string; message: string }>("plugin-alert", (e) => {

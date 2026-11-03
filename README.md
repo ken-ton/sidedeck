@@ -1,5 +1,7 @@
 # win-deck
 
+[![CI](https://github.com/ken-ton/win-deck/actions/workflows/ci.yml/badge.svg)](https://github.com/ken-ton/win-deck/actions/workflows/ci.yml)
+
 デスクトップ PC にタッチ対応モバイルモニターをつなぎ、
 Stream Deck のような**タッチ操作のボタンパネル**として使うための Windows アプリです。
 
@@ -36,11 +38,22 @@ Tauri 2（Rust）＋ React / TypeScript で作っています。
 
 ## インストール
 
+[Releases](https://github.com/ken-ton/win-deck/releases) から `win-deck_<バージョン>_x64-setup.exe` をダウンロードして実行します。
+管理者権限は不要で、現在のユーザーにインストールされます。
+インストーラーには署名がないため、Windows SmartScreen の警告が表示されることがあります。
+
+## ソースからビルド
+
 1. `npm install`
 2. `npm run tauri build` を実行すると、`src-tauri/target/release/bundle/nsis/win-deck_<バージョン>_x64-setup.exe` ができます。
-3. インストーラーを実行します（管理者権限は不要で、現在のユーザーにインストールされます）。
 
 開発中は `npm run tauri dev` で動かせます。開発版とインストール版は同時には起動できません（後から起動した方は、先に起動している方のウィンドウを開くだけになります）。
+
+## リリースの手順
+
+1. `package.json`、`src-tauri/Cargo.toml`、`src-tauri/tauri.conf.json` のバージョンを上げてコミットします。
+2. `v<バージョン>` のタグ（例: `v0.2.3`）を付けて push します。
+3. GitHub Actions がテストとビルドを行い、インストーラー付きのリリースを作成します。タグとバージョンが一致しないときは失敗します。
 
 ## 使い方
 
@@ -70,5 +83,10 @@ Tauri 2（Rust）＋ React / TypeScript で作っています。
 
 ```sh
 cd src-tauri
-cargo test -- --nocapture   # 実機のモニター・音声デバイス・アイコン取得などを読むスモークテスト
+cargo test                                # 単体テスト（CI でも実行）
+cargo test -- --ignored --nocapture       # 実機のモニター・音声デバイス・アイコン取得などを読むスモークテスト
 ```
+
+## ライセンス
+
+[MIT](LICENSE)

@@ -1,8 +1,10 @@
 [package]
 name = "win-deck"
-version = "0.2.2"
+version = "0.2.3"
 description = "Steam Deck ライクなタッチ用ランチャー（Windows / モバイルモニター向け）"
 authors = ["KT"]
+license = "MIT"
+repository = "https://github.com/ken-ton/win-deck"
 edition = "2024"
 
 [lib]

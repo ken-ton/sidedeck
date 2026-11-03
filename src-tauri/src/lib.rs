@@ -655,6 +655,7 @@ mod smoke {
     //! 実機の状態を読むだけのスモークテスト。画面配置や音声デバイスは変更しない。
 
     #[test]
+    #[ignore = "実機のモニターや音声デバイスが必要（CI では動かない）"]
     fn reads_system_state() {
         let mons = crate::display::list_monitors();
         assert!(!mons.is_empty(), "アクティブなモニターが 1 つも取得できない");

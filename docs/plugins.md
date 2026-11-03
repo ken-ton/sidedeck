@@ -115,6 +115,7 @@ win-deck が終了すると、プラグインのプロセスも終了します�
   "title": "3", "icon": "data:image/png;base64,…", "sub": "補足", "state": "active" }
 ```
 `state` は `normal` / `active`（青い枠）/ `alert`（赤）。
+`icon` は `data:image/…` の URL だけを受け付けます。外部の URL は表示しません。
 
 ### showAlert
 ボタンを失敗の表示にして、メッセージを出します。
