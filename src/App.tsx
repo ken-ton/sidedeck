@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, AudioDevice, DeckStatus, States } from "./api";
+import { api, AudioDevice, DeckStatus, States, WindowApp } from "./api";
 import { DeckButton, DeckData, defaultDeck, Page, runsInBackend, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
@@ -16,14 +16,73 @@ function Clock() {
   return <span className="clock">{now.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span>;
 }
 
-function PageEditor({ page, canDelete, onSave, onDelete, onClose }: {
+/** ページに自動切替のアプリを登録する欄 */
+function AppsField({ apps, onChange, lastApp }: { apps: string[]; onChange: (apps: string[]) => void; lastApp: WindowApp | null }) {
+  const [running, setRunning] = useState<WindowApp[] | null>(null);
+  const [manual, setManual] = useState("");
+  const add = (name: string) => {
+    const n = name.trim().toLowerCase();
+    if (!n) return;
+    const exe = n.endsWith(".exe") ? n : `${n}.exe`;
+    if (!apps.includes(exe)) onChange([...apps, exe]);
+  };
+
+  return (
+    <section>
+      <h2>自動で切り替えるアプリ</h2>
+      <p className="hint">ここに登録したアプリが前面に来たら、このページに切り替えます。そのアプリから離れると、元のページに戻ります。</p>
+      <div className="chips wrap">
+        {apps.map((a) => (
+          <button key={a} className="on" onClick={() => onChange(apps.filter((x) => x !== a))}>
+            {a} ✕
+          </button>
+        ))}
+        {apps.length === 0 && <span className="hint">未登録</span>}
+      </div>
+      <div className="chips wrap">
+        {lastApp && !apps.includes(lastApp.name) && <button onClick={() => add(lastApp.name)}>＋ 直前に使っていたアプリ（{lastApp.name}）</button>}
+        <button onClick={() => api.listWindowApps().then(setRunning)}>＋ 実行中のアプリから選ぶ</button>
+      </div>
+      {running && (
+        <ul className="picker">
+          {running.map((w) => (
+            <li key={w.name}>
+              <button
+                className={apps.includes(w.name) ? "on" : ""}
+                onClick={() => (apps.includes(w.name) ? onChange(apps.filter((x) => x !== w.name)) : add(w.name))}
+              >
+                <span>{w.name}</span>
+                <small>{w.title}</small>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="inline-add">
+        <input value={manual} placeholder="プロセス名を入力（例: code.exe）" onChange={(e) => setManual(e.target.value)} />
+        <button
+          onClick={() => {
+            add(manual);
+            setManual("");
+          }}
+        >
+          追加
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function PageEditor({ page, canDelete, lastApp, onSave, onDelete, onClose }: {
   page: Page;
   canDelete: boolean;
-  onSave: (name: string) => void;
+  lastApp: WindowApp | null;
+  onSave: (name: string, apps: string[]) => void;
   onDelete: () => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(page.name);
+  const [apps, setApps] = useState(page.apps ?? []);
   const [confirm, setConfirm] = useState(false);
   return (
     <div className="overlay center" onClick={onClose}>
@@ -38,6 +97,7 @@ function PageEditor({ page, canDelete, onSave, onDelete, onClose }: {
           <span>名前</span>
           <input value={name} onChange={(e) => setName(e.target.value)} />
         </label>
+        {!page.folder && <AppsField apps={apps} onChange={setApps} lastApp={lastApp} />}
         <div className="sheet-actions">
           {canDelete && (
             <button className="danger" onClick={() => (confirm ? onDelete() : setConfirm(true))}>
@@ -48,7 +108,7 @@ function PageEditor({ page, canDelete, onSave, onDelete, onClose }: {
           <button className="ghost" onClick={onClose}>
             キャンセル
           </button>
-          <button className="on" onClick={() => onSave(name.trim() || page.name)}>
+          <button className="on" onClick={() => onSave(name.trim() || page.name, apps)}>
             保存
           </button>
         </div>
@@ -71,6 +131,10 @@ export default function App() {
   const [outputs, setOutputs] = useState<AudioDevice[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [flash, setFlash] = useState<{ id: string; ok: boolean } | null>(null);
+  /** 最後に前面にあったアプリ（win-deck 自身は含まない） */
+  const [foreground, setForeground] = useState<WindowApp | null>(null);
+  /** 自動切替中なら、切替先のページと、戻り先のページ履歴 */
+  const autoSwitched = useRef<{ page: string; returnTo: string[] } | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -90,9 +154,11 @@ export default function App() {
       if (!saved) api.saveDeck(d);
     });
     api.deckStatus().then(setStatus);
+    api.getForegroundApp().then(setForeground);
     const un = [
       listen<DeckStatus>("deck-status", (e) => setStatus(e.payload)),
       listen<string>("deck-error", (e) => showToast(e.payload)),
+      listen<WindowApp>("foreground-app", (e) => setForeground(e.payload)),
     ];
     return () => un.forEach((p) => p.then((f) => f()));
   }, [showToast]);
@@ -124,6 +190,28 @@ export default function App() {
     const id = stack[stack.length - 1];
     return deck.pages.find((p) => p.id === id) ?? roots[0] ?? null;
   }, [deck, stack, roots]);
+
+  // 前面のアプリが変わったら、登録されたページに自動で切り替える
+  useEffect(() => {
+    if (!deck || !foreground || editing || deck.autoSwitch === false) return;
+    const current = stack.length ? stack : roots[0] ? [roots[0].id] : [];
+    const currentId = current[current.length - 1];
+    const target = deck.pages.find((p) => !p.folder && p.apps?.includes(foreground.name));
+    const auto = autoSwitched.current;
+    if (target) {
+      if (target.id === currentId) return;
+      // 自動切替先から別の自動切替先へ移るときは、最初の戻り先を引き継ぐ
+      const returnTo = auto && auto.page === currentId ? auto.returnTo : current;
+      autoSwitched.current = { page: target.id, returnTo };
+      setStack([target.id]);
+    } else if (auto) {
+      // 自動で切り替えたページのままなら元に戻す（自分でページを移動していたらそのまま）
+      if (auto.page === currentId) setStack(auto.returnTo);
+      autoSwitched.current = null;
+    }
+    // 前面のアプリが変わったときだけ判定する
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [foreground]);
 
   if (!deck || !page) return null;
 
@@ -241,6 +329,7 @@ export default function App() {
             {roots.map((p) => (
               <button key={p.id} className={p.id === page.id ? "on" : ""} onClick={() => tapTab(p)}>
                 {p.name}
+                {!!p.apps?.length && deck.autoSwitch !== false && <span className="auto-mark" title="自動切替あり">⚡</span>}
                 {editing && p.id === page.id && " ✎"}
               </button>
             ))}
@@ -306,9 +395,19 @@ export default function App() {
         <PageEditor
           page={pageEdit}
           canDelete={pageEdit.folder || roots.length > 1}
+          lastApp={foreground}
           onClose={() => setPageEdit(null)}
-          onSave={(name) => {
-            updatePage(pageEdit.id, (p) => ({ ...p, name }));
+          onSave={(name, apps) => {
+            const id = pageEdit.id;
+            commit({
+              ...deck,
+              pages: deck.pages.map((p) =>
+                p.id === id
+                  ? { ...p, name, apps: p.folder ? undefined : apps }
+                  : // 同じアプリは 1 つのページにだけ登録する
+                    { ...p, apps: p.apps?.filter((a) => !apps.includes(a)) },
+              ),
+            });
             setPageEdit(null);
           }}
           onDelete={() => {

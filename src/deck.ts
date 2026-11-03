@@ -33,6 +33,8 @@ export type Page = {
   /** true ならフォルダ（タブには出さず、ボタンから開く） */
   folder: boolean;
   buttons: DeckButton[];
+  /** このアプリ（小文字のプロセス名）が前面に来たら、このページに自動で切り替える */
+  apps?: string[];
 };
 
 export type DeckData = {
@@ -40,6 +42,8 @@ export type DeckData = {
   columns: number;
   rows: number;
   pages: Page[];
+  /** 前面のアプリに合わせてページを自動で切り替える（未設定なら有効） */
+  autoSwitch?: boolean;
 };
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);

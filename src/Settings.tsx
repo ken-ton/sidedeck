@@ -111,6 +111,19 @@ export default function Settings({ deck, status, onDeckChange, onResetDeck, onEr
         )}
 
         <section>
+          <label className="switch-row">
+            <span>前面のアプリに合わせてページを自動で切り替える</span>
+            <input
+              type="checkbox"
+              className="switch"
+              checked={deck.autoSwitch !== false}
+              onChange={(e) => onDeckChange({ ...deck, autoSwitch: e.target.checked })}
+            />
+          </label>
+          <p className="hint">切り替えるアプリは、編集モードでページのタブをタップして登録します（⚡ が付いたページ）。</p>
+        </section>
+
+        <section>
           <h2>ボタンの数</h2>
           <div className="grid-size">
             <span>横</span>

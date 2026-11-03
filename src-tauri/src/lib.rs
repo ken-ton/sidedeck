@@ -2,6 +2,7 @@ mod actions;
 mod audio;
 mod config;
 mod display;
+mod foreground;
 mod games;
 mod icons;
 mod input;
@@ -265,6 +266,17 @@ async fn get_icon(target: String) -> Option<String> {
     icons::icon_for(&target)
 }
 
+/// 最後に前面にあったアプリ（win-deck 自身などは除く）
+#[tauri::command]
+async fn get_foreground_app(app: AppHandle) -> Option<foreground::WindowApp> {
+    app.state::<foreground::LastForeground>().0.lock().unwrap().clone()
+}
+
+#[tauri::command]
+async fn list_window_apps() -> Vec<foreground::WindowApp> {
+    foreground::list_window_apps()
+}
+
 #[tauri::command]
 async fn list_installed_games() -> Vec<games::Game> {
     games::list_games()
@@ -431,8 +443,11 @@ pub fn run() {
                 deck: Mutex::new(Deck { gamma: 1.0, ..Default::default() }),
             });
 
+            app.manage(foreground::LastForeground::default());
+
             build_tray(app)?;
             spawn_monitor_watcher(app.handle().clone());
+            foreground::spawn_watcher(app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -461,6 +476,8 @@ pub fn run() {
             list_audio_outputs,
             get_icon,
             list_installed_games,
+            get_foreground_app,
+            list_window_apps,
             get_volume,
             set_volume,
             set_mute,
@@ -502,6 +519,9 @@ mod smoke {
             println!("set_default_output(既定のまま) = {r:?}");
             assert!(r.is_ok());
             assert_eq!(crate::audio::default_output_id().as_deref(), Some(id.as_str()));
+        }
+        for w in crate::foreground::list_window_apps() {
+            println!("window app: {} | {}", w.name, w.title);
         }
         let n = crate::games::list_games().len();
         println!("installed games = {n}");

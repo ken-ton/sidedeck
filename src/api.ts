@@ -26,6 +26,7 @@ export type AudioDevice = { id: string; name: string; isDefault: boolean };
 export type Volume = { level: number; muted: boolean };
 export type Brightness = { method: "ddc" | "gamma"; value: number; min: number };
 export type DisplayMode = { width: number; height: number; refresh: number };
+export type WindowApp = { name: string; title: string };
 export type PowerPlan = { id: string; name: string; active: boolean };
 
 export const api = {
@@ -48,6 +49,8 @@ export const api = {
   listAudioOutputs: () => invoke<AudioDevice[]>("list_audio_outputs"),
   getIcon: (target: string) => invoke<string | null>("get_icon", { target }),
   listInstalledGames: () => invoke<InstalledGame[]>("list_installed_games"),
+  getForegroundApp: () => invoke<WindowApp | null>("get_foreground_app"),
+  listWindowApps: () => invoke<WindowApp[]>("list_window_apps"),
 
   // システムパネル
   getVolume: () => invoke<Volume>("get_volume"),
