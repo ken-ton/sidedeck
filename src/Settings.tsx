@@ -184,7 +184,7 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
 
         <section>
           <h2>タッチ入力</h2>
-          <p className="hint">タッチがメインモニター側に反応する場合は、Deck 用モニターをタッチ画面として登録してください。</p>
+          <p className="hint">タッチがメインモニター側に反応する場合は、Deck 用モニターをタッチ画面として登録してください。開くときに管理者権限の確認が表示されます。</p>
           <button className="action secondary" onClick={() => api.openTouchSetup().catch((e) => onError(String(e)))}>
             タッチ画面のセットアップを開く
           </button>

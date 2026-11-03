@@ -229,13 +229,20 @@ async fn set_focusable(app: AppHandle, window: tauri::WebviewWindow, focusable: 
 }
 
 /// Windows の「タッチ入力を行う画面の識別」ツールを開く。
+/// このツールは管理者権限を要求するので、CreateProcess では ERROR_ELEVATION_REQUIRED (740) になる。
+/// ShellExecute なら UAC の確認を出して起動できる。
 #[tauri::command]
 async fn open_touch_setup() -> CmdResult<()> {
-    std::process::Command::new("MultiDigiMon.exe")
-        .arg("-touch")
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+    use windows::core::w;
+    let r = unsafe { ShellExecuteW(None, w!("open"), w!("MultiDigiMon.exe"), w!("-touch"), None, SW_SHOWNORMAL) };
+    match r.0 as isize {
+        n if n > 32 => Ok(()),
+        // SE_ERR_ACCESSDENIED: UAC の確認で「いいえ」を選んだとき
+        5 => Err("管理者権限の確認がキャンセルされました".into()),
+        n => Err(format!("タッチ画面のセットアップを開けませんでした（code {n}）")),
+    }
 }
 
 #[tauri::command]
