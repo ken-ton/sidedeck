@@ -20,6 +20,7 @@ import {
 import ButtonFace from "./ButtonFace";
 import MacroFields from "./MacroFields";
 import WindowFields from "./WindowFields";
+import ShortcutField from "./ShortcutField";
 
 /** 新しいフォルダを作るときの仮の pageId */
 const NEW_FOLDER = "__new__";
@@ -31,6 +32,10 @@ type Props = {
   onSave: (button: DeckButton, newFolder: Page | null) => void;
   onDelete: () => void;
   onMove: () => void;
+  onDuplicate: () => void;
+  onCopy: () => void;
+  shortcutError: string | null;
+  shortcutUserOf: (keys: string[] | undefined) => string | null;
   onClose: () => void;
   onError: (msg: string) => void;
 };
@@ -181,7 +186,7 @@ function AudioDeviceFields({ action, onChange }: { action: Extract<Action, { typ
   );
 }
 
-export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, onMove, onClose, onError }: Props) {
+export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, onMove, onDuplicate, onCopy, shortcutError, shortcutUserOf, onClose, onError }: Props) {
   const [b, setB] = useState<DeckButton>(initial);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const setAction = (action: Action) => setB((x) => ({ ...x, action }));
@@ -336,6 +341,17 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
           {b.action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
         </section>
 
+        <section>
+          <h2>キーボードショートカット（任意）</h2>
+          <ShortcutField
+            value={b.shortcut}
+            onChange={(keys) => setB({ ...b, shortcut: keys?.length ? keys : undefined })}
+            registeredError={initial.shortcut?.join("+") === b.shortcut?.join("+") ? shortcutError : null}
+            usedBy={shortcutUserOf(b.shortcut)}
+          />
+          <p className="hint">どのアプリを使っているときでも、このキーでボタンを実行できます。</p>
+        </section>
+
         <div className="sheet-actions">
           {!isNew && (
             <>
@@ -349,6 +365,8 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
                 {confirmDelete ? (b.action.type === "page" ? "フォルダごと削除" : "本当に削除") : "削除"}
               </button>
               <button onClick={onMove}>移動</button>
+              <button onClick={onDuplicate}>複製</button>
+              <button onClick={onCopy}>コピー</button>
             </>
           )}
           <span className="spacer" />

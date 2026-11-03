@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, AudioDevice, DeckStatus, States, WindowApp } from "./api";
-import { DeckButton, DeckData, defaultDeck, Page, runsInBackend, uid } from "./deck";
+import { cloneButton, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, runsInBackend, shortcutEntries, shortcutUser, TOGGLE_SHORTCUT_ID, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
@@ -123,6 +123,7 @@ export default function App() {
   const [editing, setEditing] = useState(false);
   const [editor, setEditor] = useState<{ button: DeckButton; isNew: boolean } | null>(null);
   const [moving, setMoving] = useState<string | null>(null);
+  const [clipboard, setClipboard] = useState<{ button: DeckButton; pages: Page[] } | null>(null);
   const [pageEdit, setPageEdit] = useState<Page | null>(null);
   const [overlay, setOverlay] = useState<"settings" | "system" | null>(null);
   const [status, setStatus] = useState<DeckStatus>({ active: false, monitorConnected: false });
@@ -133,6 +134,10 @@ export default function App() {
   const [runningMacros, setRunningMacros] = useState<Set<string>>(new Set());
   const [foreground, setForeground] = useState<WindowApp | null>(null);
   const autoSwitched = useRef<{ page: string; returnTo: string[] } | null>(null);
+  /** 登録できなかったショートカット（id → 理由） */
+  const [shortcutErrors, setShortcutErrors] = useState<Record<string, string>>({});
+  /** ショートカットのイベントから、最新の deck で実行するため */
+  const runShortcut = useRef<(id: string) => void>(() => {});
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -166,6 +171,7 @@ export default function App() {
         });
         if (error) showToast(`マクロが止まりました: ${error}`);
       }),
+      listen<string>("shortcut", (e) => runShortcut.current(e.payload)),
     ];
     return () => un.forEach((p) => p.then((f) => f()));
   }, [showToast]);
@@ -184,6 +190,21 @@ export default function App() {
     const t = setInterval(load, 10_000);
     return () => clearInterval(t);
   }, [hasAudioButtons]);
+
+  const entries = useMemo(() => (deck ? shortcutEntries(deck) : null), [deck]);
+  const entriesKey = JSON.stringify(entries?.map((e) => [e.id, e.keys]));
+  useEffect(() => {
+    if (!entries) return;
+    api.setShortcuts(entries.map(({ id, keys }) => ({ id, keys }))).then((results) => {
+      const errors: Record<string, string> = {};
+      for (const r of results) if (r.error) errors[r.id] = r.error;
+      setShortcutErrors(errors);
+      const failed = entries.filter((e) => errors[e.id]).map((e) => e.label);
+      if (failed.length) showToast(`登録できなかったショートカットがあります: ${failed.join("、")}`);
+    });
+    // ショートカットの中身が変わったときだけ登録し直す
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entriesKey]);
 
   // 通常時はフォーカスを奪わないようにし、編集中だけキーボード入力を受け付ける
   useEffect(() => {
@@ -245,6 +266,13 @@ export default function App() {
     window.setTimeout(refreshStates, 300);
   };
 
+  runShortcut.current = (id: string) => {
+    for (const p of deck.pages) {
+      const b = p.buttons.find((x) => x.id === id);
+      if (b) return void run(b);
+    }
+  };
+
   const moveTo = (slot: number) => {
     const src = page.buttons.find((b) => b.id === moving);
     setMoving(null);
@@ -255,9 +283,32 @@ export default function App() {
     }));
   };
 
+  const placeClone = (source: DeckButton, sourcePages: Page[], slot: number) => {
+    const { button, pages: added } = cloneButton(source, sourcePages, slot);
+    updatePage(
+      page.id,
+      (p) => ({ ...p, buttons: [...p.buttons, button] }),
+      (d) => ({ ...d, pages: [...d.pages, ...added] }),
+    );
+  };
+
+  const duplicate = (b: DeckButton) => {
+    const slot = firstEmptySlot(page, deck.columns * deck.rows, b.slot + 1);
+    if (slot === null) return showToast("このページに空きがないため複製できません");
+    placeClone(b, deck.pages, slot);
+    setEditor(null);
+  };
+
+  const copy = (b: DeckButton) => {
+    // コピー元があとで変更・削除されても貼り付けられるよう、この時点の内容を保持する
+    setClipboard({ button: structuredClone(b), pages: structuredClone(deck.pages) });
+    setEditor(null);
+  };
+
   const tapSlot = (slot: number, b?: DeckButton) => {
     if (!editing) return b && run(b);
     if (moving) return moveTo(slot);
+    if (!b && clipboard) return placeClone(clipboard.button, clipboard.pages, slot);
     setEditor(
       b
         ? { button: b, isNew: false }
@@ -297,6 +348,7 @@ export default function App() {
 
   const subFor = (b: DeckButton) => {
     const a = b.action;
+    if (editing && shortcutErrors[b.id]) return "⚠ ショートカット";
     if (a.type === "mic_mute" && states.micMuted) return "ミュート中";
     if (a.type === "audio_device" && a.deviceIds.length !== 1) return outputs.find((d) => d.id === states.defaultOutput)?.name ?? null;
     if (a.type === "page") return "📁";
@@ -358,7 +410,20 @@ export default function App() {
 
       {editing && (
         <div className="edit-hint">
-          {moving ? "移動先をタップしてください（ボタンがある場所なら入れ替わります）" : "ボタンをタップして編集、空いている場所をタップして追加。タブをもう一度タップすると名前を変えられます。"}
+          {moving ? (
+            "移動先をタップしてください（ボタンがある場所なら入れ替わります）"
+          ) : clipboard ? (
+            <>
+              <span>
+                コピー中:「{clipboard.button.label || "（名前なし）"}」 空いている場所をタップすると貼り付けます（ほかのページにも貼り付けられます）
+              </span>
+              <button className="hint-action" onClick={() => setClipboard(null)}>
+                コピーを解除
+              </button>
+            </>
+          ) : (
+            "ボタンをタップして編集、空いている場所をタップして追加。タブをもう一度タップすると名前を変えられます。"
+          )}
         </div>
       )}
 
@@ -368,7 +433,7 @@ export default function App() {
           if (!b) {
             return (
               <button key={`empty-${slot}`} className={`key empty ${editing ? "editable" : ""}`} onClick={() => tapSlot(slot)} disabled={!editing}>
-                {editing && <span className="plus">＋</span>}
+                {editing && <span className="plus">{clipboard && !moving ? "📋" : "＋"}</span>}
               </button>
             );
           }
@@ -391,6 +456,10 @@ export default function App() {
             setMoving(editor.button.id);
             setEditor(null);
           }}
+          onDuplicate={() => duplicate(editor.button)}
+          onCopy={() => copy(editor.button)}
+          shortcutError={shortcutErrors[editor.button.id] ?? null}
+          shortcutUserOf={(keys) => shortcutUser(deck, keys, editor.button.id)}
           onClose={() => setEditor(null)}
           onError={showToast}
         />
@@ -436,6 +505,8 @@ export default function App() {
           deck={deck}
           status={status}
           onDeckChange={commit}
+          toggleShortcutError={shortcutErrors[TOGGLE_SHORTCUT_ID] ?? null}
+          shortcutUserOf={(keys) => shortcutUser(deck, keys, TOGGLE_SHORTCUT_ID)}
           onResetDeck={() => {
             const d = defaultDeck();
             commit(d);

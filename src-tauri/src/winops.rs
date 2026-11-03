@@ -178,3 +178,36 @@ pub fn minimize() -> Result<Option<String>, String> {
     }
     Ok(None)
 }
+
+fn intersects(a: &RECT, b: &RECT) -> bool {
+    a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+}
+
+/// `deck` が `area` の中で一番手前なら最背面へ、そうでなければ最前面へ移す。どちらもアクティブにはしない。
+/// タスクバーなどの常に手前にあるウィンドウは、手前かどうかの判定から外す。
+pub fn toggle_front(deck: HWND, area: RECT) {
+    unsafe {
+        let mut front = false;
+        let mut h = GetTopWindow(None).unwrap_or_default();
+        while !h.is_invalid() {
+            if h == deck {
+                front = true;
+                break;
+            }
+            let topmost = GetWindowLongPtrW(h, GWL_EXSTYLE) as u32 & WS_EX_TOPMOST.0 != 0;
+            let mut r = RECT::default();
+            if !topmost && is_app_window(h) && !IsIconic(h).as_bool() && GetWindowRect(h, &mut r).is_ok() && intersects(&r, &area) {
+                break;
+            }
+            h = GetWindow(h, GW_HWNDNEXT).unwrap_or_default();
+        }
+        let flags = SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE;
+        if front {
+            let _ = SetWindowPos(deck, Some(HWND_BOTTOM), 0, 0, 0, 0, flags);
+        } else {
+            // TOPMOST にしてすぐ戻すと、アクティブにせずに通常ウィンドウの一番手前へ出せる
+            let _ = SetWindowPos(deck, Some(HWND_TOPMOST), 0, 0, 0, 0, flags);
+            let _ = SetWindowPos(deck, Some(HWND_NOTOPMOST), 0, 0, 0, 0, flags);
+        }
+    }
+}

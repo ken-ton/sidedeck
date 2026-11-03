@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, Config, DeckStatus, MonitorInfo } from "./api";
-import type { DeckData } from "./deck";
+import { DEFAULT_TOGGLE_SHORTCUT, type DeckData } from "./deck";
+import ShortcutField from "./ShortcutField";
 
 type Props = {
   deck: DeckData;
   status: DeckStatus;
   onDeckChange: (deck: DeckData) => void;
+  toggleShortcutError: string | null;
+  shortcutUserOf: (keys: string[] | undefined) => string | null;
   onResetDeck: () => void;
   onError: (msg: string) => void;
   onClose: () => void;
@@ -14,7 +17,7 @@ type Props = {
 
 const monitorLabel = (m: MonitorInfo) => m.friendlyName || m.gdiName.replace("\\\\.\\", "");
 
-export default function Settings({ deck, status, onDeckChange, onResetDeck, onError, onClose }: Props) {
+export default function Settings({ deck, status, onDeckChange, toggleShortcutError, shortcutUserOf, onResetDeck, onError, onClose }: Props) {
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -120,6 +123,17 @@ export default function Settings({ deck, status, onDeckChange, onResetDeck, onEr
             />
           </label>
           <p className="hint">切り替えるアプリは、編集モードでページのタブをタップして登録します（⚡ が付いたページ）。</p>
+        </section>
+
+        <section>
+          <h2>デッキを前面に出すショートカット</h2>
+          <ShortcutField
+            value={deck.toggleShortcut ?? DEFAULT_TOGGLE_SHORTCUT}
+            onChange={(keys) => onDeckChange({ ...deck, toggleShortcut: keys ?? [] })}
+            registeredError={toggleShortcutError}
+            usedBy={shortcutUserOf(deck.toggleShortcut ?? DEFAULT_TOGGLE_SHORTCUT)}
+          />
+          <p className="hint">Deck 用モニターでほかのアプリがデッキを隠しているときに押すと、デッキを手前に出します。もう一度押すと後ろに下げます。どちらもフォーカスは奪いません。</p>
         </section>
 
         <section>

@@ -7,6 +7,7 @@ mod games;
 mod icons;
 mod input;
 mod macros;
+mod shortcuts;
 mod system;
 mod winops;
 
@@ -84,6 +85,25 @@ fn place_main_fullscreen(app: &AppHandle) {
         input::set_noactivate(&win, true);
         let _ = win.show();
     }
+}
+
+/// Deck モード中は前面／背面を切り替え、そうでなければウィンドウを開く。
+pub(crate) fn toggle_deck_front(app: &AppHandle) {
+    let Some(win) = app.get_webview_window("main") else { return };
+    let st = app.state::<AppState>();
+    let (active, (x, y, w, h)) = {
+        let d = st.deck.lock().unwrap();
+        (d.active, d.rect)
+    };
+    if !active {
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+        return;
+    }
+    let Ok(hwnd) = win.hwnd() else { return };
+    let area = windows::Win32::Foundation::RECT { left: x, top: y, right: x + w as i32, bottom: y + h as i32 };
+    winops::toggle_front(windows::Win32::Foundation::HWND(hwnd.0 as _), area);
 }
 
 fn enter_deck(app: &AppHandle) -> Result<(), String> {
@@ -250,6 +270,16 @@ async fn stop_key_recording(keep_timing: bool) -> Vec<macros::Step> {
 struct States {
     mic_muted: Option<bool>,
     default_output: Option<String>,
+}
+
+#[tauri::command]
+async fn set_shortcuts(app: AppHandle, entries: Vec<shortcuts::Entry>) -> Vec<shortcuts::EntryResult> {
+    shortcuts::set_all(&app, entries)
+}
+
+#[tauri::command]
+async fn check_shortcut(app: AppHandle, keys: Vec<String>) -> Option<String> {
+    shortcuts::check(&app, &keys)
 }
 
 #[tauri::command]
@@ -421,6 +451,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(shortcuts::plugin())
         .setup(|app| {
             let config_path = app.path().app_config_dir()?.join("config.json");
             let mut config = Config::load(&config_path);
@@ -440,6 +471,7 @@ pub fn run() {
             });
 
             app.manage(foreground::LastForeground::default());
+            app.manage(shortcuts::Registered::default());
 
             build_tray(app)?;
             spawn_monitor_watcher(app.handle().clone());
@@ -467,6 +499,8 @@ pub fn run() {
             get_deck,
             save_deck,
             run_action,
+            set_shortcuts,
+            check_shortcut,
             start_key_recording,
             stop_key_recording,
             get_states,

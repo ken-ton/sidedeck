@@ -159,6 +159,30 @@ pub fn name_for_vk(vk: u16) -> Option<String> {
     NAMED.iter().find(|n| vk_for(n).is_some_and(|(x, _)| x == v)).map(|n| n.to_string())
 }
 
+fn modifier_held() -> Option<VIRTUAL_KEY> {
+    [VK_CONTROL, VK_MENU, VK_SHIFT, VK_LWIN, VK_RWIN]
+        .into_iter()
+        .find(|&vk| unsafe { GetAsyncKeyState(vk.0 as i32) } as u16 & 0x8000 != 0)
+}
+
+/// ショートカットで実行した操作に、ユーザーがまだ押している修飾キーが混ざらないよう待つ。
+pub fn wait_modifiers_released(timeout: Duration) {
+    let end = std::time::Instant::now() + timeout;
+    while modifier_held().is_some() && std::time::Instant::now() < end {
+        std::thread::sleep(Duration::from_millis(15));
+    }
+}
+
+/// Alt / Win を押したままのショートカットは、離したときに「Alt だけ（Win だけ）押した」と見なされ、
+/// メニューバーやスタートメニューが開いてしまう。割り当てのない vkE8 を挟んでそれを防ぐ（AutoHotkey と同じ方法）。
+pub fn mask_menu_key() {
+    let held = |vk: VIRTUAL_KEY| unsafe { GetAsyncKeyState(vk.0 as i32) } as u16 & 0x8000 != 0;
+    if held(VK_MENU) || held(VK_LWIN) || held(VK_RWIN) {
+        let mask = VIRTUAL_KEY(0xE8);
+        let _ = send(&[key_input(mask, true, false), key_input(mask, true, true)]);
+    }
+}
+
 /// Unicode 入力なので、ゲームには効かないことが多い。
 pub fn send_text(text: &str) -> Result<(), String> {
     let mut inputs = Vec::new();

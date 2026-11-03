@@ -717,3 +717,33 @@ button.danger-fill {
 .step-form {
   padding: 4px 14px 14px 42px;
 }
+
+.edit-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.hint-action {
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 0 16px;
+  font-size: 0.85rem;
+  background: var(--bg-3);
+}
+
+.sheet-actions {
+  flex-wrap: wrap;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.keys-display.small {
+  font-size: 1.2rem;
+  padding: 0 8px 0 0;
+  min-width: 120px;
+}
