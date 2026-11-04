@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import AppVolumes from "./AppVolumes";
 import { api, Brightness, DisplayMode, PowerPlan, throttle, Volume } from "./api";
 
 const modeKey = (m: DisplayMode) => `${m.width}x${m.height}@${m.refresh}`;
@@ -85,6 +86,8 @@ export default function SystemPanel({ onClose }: { onClose: () => void }) {
             </div>
           </section>
         )}
+
+        <AppVolumes />
 
         {bright && (
           <section>

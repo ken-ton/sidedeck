@@ -24,6 +24,7 @@ export type DeckStatus = { active: boolean; monitorConnected: boolean };
 export type States = { micMuted: boolean | null; defaultOutput: string | null };
 export type AudioDevice = { id: string; name: string; isDefault: boolean };
 export type NowPlaying = { title: string; artist: string; playing: boolean; thumbnail: string | null };
+export type AppVolume = { key: string; name: string; path: string | null; level: number; muted: boolean };
 export type Volume = { level: number; muted: boolean };
 export type Brightness = { method: "ddc" | "gamma"; value: number; min: number };
 export type DisplayMode = { width: number; height: number; refresh: number };
@@ -92,6 +93,8 @@ export const api = {
 
   getVolume: () => invoke<Volume>("get_volume"),
   setVolume: (level: number) => invoke<void>("set_volume", { level }),
+  listAppVolumes: () => invoke<AppVolume[]>("list_app_volumes"),
+  setAppVolume: (key: string, level: number | null, muted: boolean | null) => invoke<void>("set_app_volume", { key, level, muted }),
   setMute: (muted: boolean) => invoke<void>("set_mute", { muted }),
   getBrightness: () => invoke<Brightness>("get_brightness"),
   setBrightness: (value: number) => invoke<void>("set_brightness", { value }),

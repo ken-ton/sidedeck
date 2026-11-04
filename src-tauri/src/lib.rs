@@ -1,4 +1,5 @@
 mod actions;
+mod appvolume;
 mod audio;
 mod config;
 mod display;
@@ -407,6 +408,16 @@ async fn take_startup_warning(app: AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
+async fn list_app_volumes() -> CmdResult<Vec<appvolume::AppVolume>> {
+    appvolume::list()
+}
+
+#[tauri::command]
+async fn set_app_volume(key: String, level: Option<f32>, muted: Option<bool>) -> CmdResult<()> {
+    appvolume::set(&key, level, muted)
+}
+
+#[tauri::command]
 async fn get_stats() -> stats::Stats {
     tauri::async_runtime::spawn_blocking(stats::get).await.unwrap_or_default()
 }
@@ -671,6 +682,8 @@ pub fn run() {
             get_states,
             get_now_playing,
             get_stats,
+            list_app_volumes,
+            set_app_volume,
             list_audio_outputs,
             get_icon,
             list_installed_games,

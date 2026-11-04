@@ -630,6 +630,34 @@ h2 {
   align-items: center;
   gap: 14px;
 }
+.app-volumes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.app-volumes .row {
+  align-items: center;
+}
+.app-volume-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.app-volume-icon {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  object-fit: contain;
+  font-size: 16px;
+  line-height: 20px;
+  text-align: center;
+}
 .icon {
   flex-shrink: 0;
   width: var(--tap);

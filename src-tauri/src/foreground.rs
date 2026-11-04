@@ -31,6 +31,10 @@ const IGNORE: &[&str] = &[
 pub struct LastForeground(pub Mutex<Option<WindowApp>>);
 
 pub fn process_name(pid: u32) -> Option<String> {
+    process_path(pid).and_then(|p| p.rsplit('\\').next().map(|s| s.to_lowercase()))
+}
+
+pub fn process_path(pid: u32) -> Option<String> {
     unsafe {
         let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid).ok()?;
         let mut buf = [0u16; 1024];
@@ -38,8 +42,7 @@ pub fn process_name(pid: u32) -> Option<String> {
         let r = QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len);
         let _ = CloseHandle(h);
         r.ok()?;
-        let path = String::from_utf16_lossy(&buf[..len as usize]);
-        path.rsplit('\\').next().map(|s| s.to_lowercase())
+        Some(String::from_utf16_lossy(&buf[..len as usize]))
     }
 }
 
