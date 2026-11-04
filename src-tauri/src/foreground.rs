@@ -17,7 +17,7 @@ pub struct WindowApp {
 }
 
 const IGNORE: &[&str] = &[
-    "win-deck.exe",
+    "sidedeck.exe",
     "searchhost.exe",
     "searchapp.exe",
     "startmenuexperiencehost.exe",

@@ -238,7 +238,7 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
   );
 }
 
-const REPOSITORY = "https://github.com/ken-ton/win-deck";
+const REPOSITORY = "https://github.com/ken-ton/sidedeck";
 
 function About({ onError }: { onError: (msg: string) => void }) {
   const [version, setVersion] = useState<string | null>(null);
@@ -251,7 +251,7 @@ function About({ onError }: { onError: (msg: string) => void }) {
     <section className="about">
       <h2>このアプリについて</h2>
       <p>
-        <strong>win-deck</strong> <span className="about-version">{version ? `バージョン ${version}` : ""}</span>
+        <strong>SideDeck</strong> <span className="about-version">{version ? `バージョン ${version}` : ""}</span>
       </p>
       <div className="chips wrap">
         <button onClick={() => open(REPOSITORY)}>GitHub</button>

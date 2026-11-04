@@ -1,18 +1,18 @@
 # プラグイン
 
-win-deck のプラグインは、win-deck とは別のプロセスとして動くプログラムです。
-win-deck が起動し、ローカルの WebSocket で通信します。言語は問いません。
+SideDeck のプラグインは、SideDeck とは別のプロセスとして動くプログラムです。
+SideDeck が起動し、ローカルの WebSocket で通信します。言語は問いません。
 
 ## 置き場所
 
 ```
-%APPDATA%\com.kenton.windeck\plugins\<任意のフォルダ名>\
+%APPDATA%\com.kenton.sidedeck\plugins\<任意のフォルダ名>\
   manifest.json
   （プラグイン本体のファイル）
-  plugin.log      … win-deck が書き込む（標準出力・標準エラー出力と log イベント）
+  plugin.log      … SideDeck が書き込む（標準出力・標準エラー出力と log イベント）
 ```
 
-win-deck の起動時、または設定画面の「プラグインを再読み込み」で読み込まれます。
+SideDeck の起動時、または設定画面の「プラグインを再読み込み」で読み込まれます。
 
 ## manifest.json
 
@@ -54,24 +54,23 @@ win-deck の起動時、または設定画面の「プラグインを再読み�
 
 ## 接続
 
-win-deck は、次の環境変数を付けてプロセスを起動します。
+SideDeck は、次の環境変数を付けてプロセスを起動します。
 
 | 環境変数 | 内容 |
 |---|---|
-| `WINDECK_PORT` | 接続先のポート（`ws://127.0.0.1:<port>/`） |
-| `WINDECK_TOKEN` | 登録に使うトークン |
-| `WINDECK_PLUGIN_ID` | manifest の `id` |
-
+| `SIDEDECK_PORT` | 接続先のポート（`ws://127.0.0.1:<port>/`） |
+| `SIDEDECK_TOKEN` | 登録に使うトークン |
+| `SIDEDECK_PLUGIN_ID` | manifest の `id` |
 接続したら、最初に次を送ります。トークンが違うと切断されます。
 
 ```json
-{ "event": "register", "pluginId": "<WINDECK_PLUGIN_ID>", "token": "<WINDECK_TOKEN>" }
+{ "event": "register", "pluginId": "<SIDEDECK_PLUGIN_ID>", "token": "<SIDEDECK_TOKEN>" }
 ```
 
-プロセスが終了すると、win-deck は 2 秒後に起動し直します（1 分間に 3 回まで）。
-win-deck が終了すると、プラグインのプロセスも終了します（Job Object）。
+プロセスが終了すると、SideDeck は 2 秒後に起動し直します（1 分間に 3 回まで）。
+SideDeck が終了すると、プラグインのプロセスも終了します（Job Object）。
 
-## win-deck → プラグイン
+## SideDeck → プラグイン
 
 ### buttons
 このプラグインの操作が割り当てられたボタンの一覧です。登録の直後と、ボタンが変わるたびに送ります。
@@ -96,7 +95,7 @@ win-deck が終了すると、プラグインのプロセスも終了します�
 { "event": "getOptions", "requestId": "…", "source": "items", "settings": { "color": "red" } }
 ```
 
-## プラグイン → win-deck
+## プラグイン → SideDeck
 
 ### options（getOptions への返事）
 
@@ -134,4 +133,4 @@ win-deck が終了すると、プラグインのプロセスも終了します�
 ## 例
 
 `examples/plugins/counter` に、ビルド不要の最小のプラグイン（Node.js）があります。
-フォルダごと `%APPDATA%\com.kenton.windeck\plugins\` にコピーすると使えます。
+フォルダごと `%APPDATA%\com.kenton.sidedeck\plugins\` にコピーすると使えます。

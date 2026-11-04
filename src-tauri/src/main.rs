@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    win_deck_lib::run()
+    sidedeck_lib::run()
 }

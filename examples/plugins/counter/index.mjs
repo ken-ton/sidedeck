@@ -1,6 +1,6 @@
-// win-deck のプラグインの最小例。Node.js 22 以降（組み込みの WebSocket を使う）。
-const { WINDECK_PORT, WINDECK_TOKEN, WINDECK_PLUGIN_ID } = process.env;
-const ws = new WebSocket(`ws://127.0.0.1:${WINDECK_PORT}/`);
+// SideDeck のプラグインの最小例。Node.js 22 以降（組み込みの WebSocket を使う）。
+const { SIDEDECK_PORT, SIDEDECK_TOKEN, SIDEDECK_PLUGIN_ID } = process.env;
+const ws = new WebSocket(`ws://127.0.0.1:${SIDEDECK_PORT}/`);
 const send = (msg) => ws.send(JSON.stringify(msg));
 const counts = new Map();
 
@@ -9,7 +9,7 @@ const FRUITS = {
   red: ["りんご", "いちご", "さくらんぼ"],
 };
 
-ws.onopen = () => send({ event: "register", pluginId: WINDECK_PLUGIN_ID, token: WINDECK_TOKEN });
+ws.onopen = () => send({ event: "register", pluginId: SIDEDECK_PLUGIN_ID, token: SIDEDECK_TOKEN });
 ws.onclose = () => process.exit(0);
 
 ws.onmessage = (e) => {

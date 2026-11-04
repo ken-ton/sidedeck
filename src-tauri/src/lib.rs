@@ -122,7 +122,7 @@ fn enter_deck(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// ソフトウェア減光は Windows に残り続けるので、Deck モードの終了時と win-deck の終了時に元に戻す。
+/// ソフトウェア減光は Windows に残り続けるので、Deck モードの終了時と SideDeck の終了時に元に戻す。
 fn restore_gamma(app: &AppHandle) {
     let st = app.state::<AppState>();
     let dimmed = st.deck.lock().unwrap().gamma < 1.0;
@@ -511,11 +511,11 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let enter = MenuItem::with_id(app, "enter", "Deck モード開始", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, "exit", "Deck モード終了", true, None::<&str>)?;
     let open = MenuItem::with_id(app, "open", "ウィンドウを開く", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "win-deck を終了", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "SideDeck を終了", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&enter, &exit, &open, &quit])?;
     TrayIconBuilder::new()
         .icon(app.default_window_icon().unwrap().clone())
-        .tooltip(format!("win-deck {}", app.package_info().version))
+        .tooltip(format!("SideDeck {}", app.package_info().version))
         .menu(&menu)
         .on_menu_event(|app, ev| match ev.id().as_ref() {
             "enter" => {
@@ -560,7 +560,8 @@ pub fn run() {
             Some(vec![AUTOSTART_ARG]),
         ))
         .setup(|app| {
-            let config_path = app.path().app_config_dir()?.join("config.json");
+            let config_dir = app.path().app_config_dir()?;
+            let config_path = config_dir.join("config.json");
             let (mut config, startup_warning) = Config::load(&config_path);
 
             // 旧バージョンが変更した画面配置が残っていたら元に戻す
@@ -589,7 +590,7 @@ pub fn run() {
                 }
             }
 
-            plugins::init(app.handle(), app.path().app_config_dir()?.join("plugins"));
+            plugins::init(app.handle(), config_dir.join("plugins"));
 
             build_tray(app)?;
             spawn_monitor_watcher(app.handle().clone());

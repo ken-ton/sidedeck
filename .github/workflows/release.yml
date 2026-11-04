@@ -47,11 +47,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: win-deck ${{ github.ref_name }}
+          releaseName: SideDeck ${{ github.ref_name }}
           releaseBody: |
-            Windows 用のインストーラー（`win-deck_<バージョン>_x64-setup.exe`）をダウンロードして実行してください。
+            Windows 用のインストーラー（`SideDeck_<バージョン>_x64-setup.exe`）をダウンロードして実行してください。
             インストーラーには署名がないため、Windows SmartScreen の警告が表示されることがあります。
 
-            [Code signing policy](https://github.com/ken-ton/win-deck#code-signing-policy)
+            [Code signing policy](https://github.com/ken-ton/sidedeck#code-signing-policy)
           releaseDraft: false
           prerelease: false

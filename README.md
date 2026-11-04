@@ -1,10 +1,10 @@
-# win-deck
+# SideDeck
 
-[![CI](https://github.com/ken-ton/win-deck/actions/workflows/ci.yml/badge.svg)](https://github.com/ken-ton/win-deck/actions/workflows/ci.yml)
+[![CI](https://github.com/ken-ton/sidedeck/actions/workflows/ci.yml/badge.svg)](https://github.com/ken-ton/sidedeck/actions/workflows/ci.yml)
 
 デスクトップ PC にタッチ対応モバイルモニターをつなぎ、
 Stream Deck のような**タッチ操作のボタンパネル**として使うための Windows アプリです。
-
+スマホやタブレットをネットワーク越しにつなぐのではなく、同じ PC につないだタッチモニターで動き、ゲームのフォーカスを奪いません。
 Tauri 2（Rust）＋ React / TypeScript で作っています。
 
 ## 機能
@@ -44,7 +44,7 @@ Tauri 2（Rust）＋ React / TypeScript で作っています。
 
 ## インストール
 
-[Releases](https://github.com/ken-ton/win-deck/releases) から `win-deck_<バージョン>_x64-setup.exe` をダウンロードして実行します。
+[Releases](https://github.com/ken-ton/sidedeck/releases) から `SideDeck_<バージョン>_x64-setup.exe` をダウンロードして実行します。
 管理者権限は不要で、現在のユーザーにインストールされます。
 インストーラーには署名がないため、Windows SmartScreen の警告が表示されることがあります。
 
@@ -57,11 +57,11 @@ Tauri 2（Rust）＋ React / TypeScript で作っています。
    - 「モニターを接続したら自動で Deck モードにする」
    - 「Windows の起動時に自動で起動する」（自動起動したときは、トレイに常駐した状態で始まります）
 
-設定とボタンは `%APPDATA%\com.kenton.windeck\config.json` に保存されます。読み込めない場合は `config.broken-<日時>.json` という名前で残してから、初期状態で起動します。
+設定とボタンは `%APPDATA%\com.kenton.sidedeck\config.json` に保存されます。読み込めない場合は `config.broken-<日時>.json` という名前で残してから、初期状態で起動します。
 
 ## プラグイン
 
-プラグインは、win-deck とは別のプロセスとして動くプログラムです。`%APPDATA%\com.kenton.windeck\plugins\` にフォルダごと置き、設定の「プラグインを再読み込み」で読み込みます。
+プラグインは、SideDeck とは別のプロセスとして動くプログラムです。`%APPDATA%\com.kenton.sidedeck\plugins\` にフォルダごと置き、設定の「プラグインを再読み込み」で読み込みます。
 
 プラグインはパソコン上で自由に動けるプログラムなので、**信頼できるものだけを入れてください**。
 
@@ -129,9 +129,9 @@ Team roles:
 
 This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
 
-- win-deck has no telemetry and does not check for updates by itself. It opens URLs (such as the links in Settings, or `https://` and `steam://` targets assigned to buttons) only when the user taps them.
+- SideDeck has no telemetry and does not check for updates by itself. It opens URLs (such as the links in Settings, or `https://` and `steam://` targets assigned to buttons) only when the user taps them.
 - Plugins are separate programs that the user installs; they are not part of this program and are covered by their own policies.
-- win-deck renders its UI with Microsoft Edge WebView2, which is covered by the [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement).
+- SideDeck renders its UI with Microsoft Edge WebView2, which is covered by the [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement).
 
 ## ライセンス
 

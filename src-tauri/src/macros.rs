@@ -127,7 +127,7 @@ unsafe extern "system" fn hook_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -
     unsafe {
         if code >= 0 {
             let kb = &*(lparam.0 as *const KBDLLHOOKSTRUCT);
-            // win-deck 自身が送った入力（マクロの再生など）は記録しない
+            // SideDeck 自身が送った入力（マクロの再生など）は記録しない
             let injected = kb.flags.0 & LLKHF_INJECTED.0 != 0;
             let down = matches!(wparam.0 as u32, WM_KEYDOWN | WM_SYSKEYDOWN);
             if !injected {

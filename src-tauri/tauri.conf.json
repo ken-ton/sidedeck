@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "win-deck",
-  "version": "0.2.5",
-  "identifier": "com.kenton.windeck",
+  "productName": "SideDeck",
+  "version": "0.3.0",
+  "identifier": "com.kenton.sidedeck",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "win-deck",
+        "title": "SideDeck",
         "width": 1100,
         "height": 720,
         "minWidth": 640,

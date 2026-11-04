@@ -216,6 +216,10 @@ fn spawn_process(app: &AppHandle, id: &str) {
     let mut cmd = Command::new(program);
     cmd.args(&manifest.args)
         .current_dir(&dir)
+        .env("SIDEDECK_PORT", port.to_string())
+        .env("SIDEDECK_TOKEN", &token)
+        .env("SIDEDECK_PLUGIN_ID", id)
+        // win-deck 時代のプラグイン向け
         .env("WINDECK_PORT", port.to_string())
         .env("WINDECK_TOKEN", &token)
         .env("WINDECK_PLUGIN_ID", id)
@@ -274,7 +278,7 @@ fn spawn_process(app: &AppHandle, id: &str) {
             e.tx = None;
             let now = Instant::now();
             e.restarts.retain(|t| now - *t < RESTART_WINDOW);
-            append_log(&e.dir, &format!("[win-deck] プロセスが終了しました (code {code:?})"));
+            append_log(&e.dir, &format!("[SideDeck] プロセスが終了しました (code {code:?})"));
             if e.restarts.len() >= MAX_RESTARTS {
                 e.status = Status::Error;
                 e.error = Some(format!("繰り返し終了したため停止しました（code {code:?}）。plugin.log を確認してください"));
@@ -463,7 +467,7 @@ pub fn set_buttons(app: &AppHandle, buttons: Vec<PluginButton>) {
 /// manifest を読み直して全プラグインを起動し直す（追加・削除・更新を反映する）。
 pub fn reload(app: &AppHandle) {
     let host = app.state::<Host>();
-    let startup_error = host.port.is_none().then_some("プラグインの待ち受けを開始できていません。win-deck を起動し直してください");
+    let startup_error = host.port.is_none().then_some("プラグインの待ち受けを開始できていません。SideDeck を起動し直してください");
     let (old, ids) = {
         let mut entries = host.entries.lock().unwrap();
         let children: Vec<Arc<Mutex<Child>>> = entries.values_mut().filter_map(|e| e.child.take()).collect();
@@ -495,7 +499,7 @@ mod tests {
 
     #[test]
     fn loads_entries_and_reports_problems() {
-        let dir = std::env::temp_dir().join(format!("windeck-plugins-test-{}", random_token()));
+        let dir = std::env::temp_dir().join(format!("sidedeck-plugins-test-{}", random_token()));
         let m = |id: &str| format!(r#"{{"id":"{id}","name":"{id}","command":"node"}}"#);
         write(&dir, "a", &m("x"));
         write(&dir, "b", &m("x"));

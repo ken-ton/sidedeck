@@ -7,7 +7,7 @@ type Props = {
   onChange: (keys: string[] | undefined) => void;
   /** 保存後に登録できなかったときのエラー */
   registeredError?: string | null;
-  /** win-deck の中で同じキーを使っているもの */
+  /** SideDeck の中で同じキーを使っているもの */
   usedBy?: string | null;
 };
 
@@ -17,7 +17,7 @@ export default function ShortcutField({ value, onChange, registeredError, usedBy
   const [checkError, setCheckError] = useState<string | null>(null);
   const keys = value ?? [];
 
-  // 記録中は win-deck のショートカットを外す（登録済みのキーが記録欄に届かず、ボタンが実行されてしまうため）
+  // 記録中は SideDeck のショートカットを外す（登録済みのキーが記録欄に届かず、ボタンが実行されてしまうため）
   useEffect(() => {
     if (!recording) return;
     api.suspendShortcuts(true);

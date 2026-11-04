@@ -1,5 +1,5 @@
 {
-  "id": "com.kenton.windeck.counter",
+  "id": "com.kenton.sidedeck.counter",
   "name": "カウンター（サンプル）",
   "version": "1.0.0",
   "command": "node",

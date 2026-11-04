@@ -101,7 +101,7 @@ pub fn set_all(app: &AppHandle, entries: Vec<Entry>) -> Vec<EntryResult> {
         .map(|e| {
             let error = match parse(&e.keys) {
                 Err(msg) => Some(msg),
-                Ok(sc) if map.contains_key(&sc.id()) => Some("win-deck の中でほかと重複しています".into()),
+                Ok(sc) if map.contains_key(&sc.id()) => Some("SideDeck の中でほかと重複しています".into()),
                 Ok(sc) => match gs.register(sc) {
                     Ok(()) => {
                         map.insert(sc.id(), e.id.clone());
@@ -117,7 +117,7 @@ pub fn set_all(app: &AppHandle, entries: Vec<Entry>) -> Vec<EntryResult> {
     results
 }
 
-/// キーを記録している間は、win-deck 自身のショートカットを外す。
+/// キーを記録している間は、SideDeck 自身のショートカットを外す。
 /// 外さないと、登録済みのキーは Windows が横取りして、記録欄に届かずにボタンが実行されてしまう。
 pub fn suspend(app: &AppHandle, suspended: bool) {
     if suspended {
@@ -129,13 +129,13 @@ pub fn suspend(app: &AppHandle, suspended: bool) {
     }
 }
 
-/// 登録できるか試す（win-deck が登録済みのものは使用可とみなす）。
+/// 登録できるか試す（SideDeck が登録済みのものは使用可とみなす）。
 pub fn check(app: &AppHandle, keys: &[String]) -> Option<String> {
     let sc = match parse(keys) {
         Ok(sc) => sc,
         Err(msg) => return Some(msg),
     };
-    // 記録の一時停止から戻る途中でも、win-deck 自身のキーは競合として扱わない
+    // 記録の一時停止から戻る途中でも、SideDeck 自身のキーは競合として扱わない
     let ours = app.state::<Registered>().0.lock().unwrap().contains_key(&sc.id())
         || app.state::<LastEntries>().0.lock().unwrap().iter().any(|e| parse(&e.keys).is_ok_and(|x| x.id() == sc.id()));
     if ours {
