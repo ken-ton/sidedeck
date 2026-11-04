@@ -3,6 +3,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { api, AudioDevice, InstalledGame } from "./api";
 import {
   Action,
+  ACTION_GROUPS,
   ACTION_LABELS,
   ActionType,
   COLORS,
@@ -288,15 +289,18 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
 
         <section>
           <h2>操作</h2>
-          <div className="chips wrap">
-            {(Object.keys(ACTION_LABELS) as ActionType[])
-              .filter((t) => t !== "none")
-              .map((t) => (
-                <button key={t} className={b.action.type === t ? "on" : ""} onClick={() => changeType(t)}>
-                  {ACTION_LABELS[t]}
-                </button>
-              ))}
-          </div>
+          {ACTION_GROUPS.map((g) => (
+            <div key={g.label} className="action-group">
+              <h3>{g.label}</h3>
+              <div className="chips wrap">
+                {g.types.map((t) => (
+                  <button key={t} className={b.action.type === t ? "on" : ""} onClick={() => changeType(t)}>
+                    {ACTION_LABELS[t]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </section>
 
         <section className="action-fields">

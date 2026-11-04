@@ -83,6 +83,13 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   plugin: "プラグイン",
 };
 
+export const ACTION_GROUPS: { label: string; types: ActionType[] }[] = [
+  { label: "開く・移動", types: ["launch", "page", "window"] },
+  { label: "キー入力", types: ["hotkey", "text", "macro"] },
+  { label: "音声・システム", types: ["media", "mic_mute", "audio_device", "system_panel"] },
+  { label: "拡張", types: ["plugin"] },
+];
+
 export const WINDOW_LABELS: Record<WindowCommand, string> = {
   focus: "アプリを前面に出す",
   move_next: "次のモニターへ移動",
