@@ -15,6 +15,8 @@ import {
   MODIFIERS,
   Page,
   formatDuration,
+  OBS_LABELS,
+  ObsCommand,
   SOUND_EXTENSIONS,
   SOUND_RETAP_LABELS,
   SoundRetap,
@@ -23,6 +25,7 @@ import {
   TIMER_PRESETS,
 } from "./deck";
 import { playSound, stopSounds } from "./sound";
+import { obs } from "./obs";
 import MacroFields from "./MacroFields";
 import WindowFields from "./WindowFields";
 import PluginFields from "./PluginFields";
@@ -45,11 +48,63 @@ export function validateAction(a: Action): string | null {
   if (a.type === "window" && a.command === "focus" && !a.app) return "前面に出すアプリを指定してください";
   if (a.type === "window" && a.command === "move_to" && !a.monitor) return "移動先のモニターを選んでください";
   if (a.type === "timer" && a.mode === "timer" && a.seconds <= 0) return "タイマーの長さを指定してください";
+  if (a.type === "obs" && a.command === "scene" && !a.scene.trim()) return "シーンを指定してください";
+  if (a.type === "obs" && a.command === "mute" && !a.input.trim()) return "音声ソースを指定してください";
   if (a.type === "sound" && !a.path.trim()) return "音声ファイルを選んでください";
   if (a.type === "macro" && a.steps.length === 0) return "ステップを 1 つ以上追加してください";
   if (a.type === "macro" && a.steps.some((s) => (s.type === "keys" || s.type === "key_down" || s.type === "key_up") && s.keys.length === 0))
     return "キーが未設定のステップがあります";
   return null;
+}
+
+function ObsFields({ action, onChange }: { action: Extract<Action, { type: "obs" }>; onChange: (a: Action) => void }) {
+  const [names, setNames] = useState<string[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const kind = action.command === "scene" ? "scene" : action.command === "mute" ? "input" : null;
+  useEffect(() => {
+    setNames(null);
+    setError(null);
+    if (!kind) return;
+    const req = kind === "scene" ? obs.request("GetSceneList") : obs.request("GetInputList");
+    req
+      .then((d) =>
+        setNames(kind === "scene" ? (d.scenes as { sceneName: string }[]).map((x) => x.sceneName).reverse() : (d.inputs as { inputName: string }[]).map((x) => x.inputName)),
+      )
+      .catch((e) => setError(String(e instanceof Error ? e.message : e)));
+  }, [kind]);
+  const value = kind === "scene" ? action.scene : action.input;
+  const setValue = (v: string) => onChange(kind === "scene" ? { ...action, scene: v } : { ...action, input: v });
+  return (
+    <>
+      <div className="chips wrap">
+        {(Object.keys(OBS_LABELS) as ObsCommand[]).map((c) => (
+          <button key={c} className={action.command === c ? "on" : ""} onClick={() => onChange({ ...action, command: c })}>
+            {OBS_LABELS[c]}
+          </button>
+        ))}
+      </div>
+      {kind && (
+        <>
+          <label className="field">
+            <span>{kind === "scene" ? "シーン" : "音声ソース"}</span>
+            <input value={value} onChange={(e) => setValue(e.target.value)} />
+          </label>
+          {names && (
+            <div className="chips wrap">
+              {names.map((n) => (
+                <button key={n} className={value === n ? "on" : ""} onClick={() => setValue(n)}>
+                  {n}
+                </button>
+              ))}
+            </div>
+          )}
+          {error && <p className="hint">OBS から一覧を取得できませんでした（{error}）。名前を直接入力することもできます。</p>}
+        </>
+      )}
+      {action.command === "stream" && <p className="hint">誤って押さないよう、3 秒以内にもう一度タップしたときに実行します。</p>}
+      <p className="hint">設定の「OBS 連携」で接続先を設定してください。ボタンは録画中・配信中・選択中のシーンなどで色が変わります。</p>
+    </>
+  );
 }
 
 const PREVIEW_ID = "__preview__";
@@ -403,6 +458,7 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
               )}
             </>
           )}
+          {action.type === "obs" && <ObsFields action={action} onChange={onChange} />}
           {action.type === "sound" && <SoundFields action={action} onChange={onChange} onSuggestLabel={onSuggestLabel} />}
           {action.type === "now_playing" && (
             <p className="hint">

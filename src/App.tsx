@@ -7,6 +7,7 @@ import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
 import SystemPanel from "./SystemPanel";
 import { onSoundsChange, playSound, stopSounds } from "./sound";
+import { obs, ObsState } from "./obs";
 
 const HOLD_MS = 500;
 const REPEAT_DELAY_MS = 400;
@@ -214,6 +215,8 @@ export default function App() {
     }, 100);
     return () => window.clearInterval(id);
   }, [anyTimerRunning]);
+  const [obsState, setObsState] = useState<ObsState>(obs.state);
+  useEffect(() => obs.subscribe(setObsState), []);
   const [sounds, setSounds] = useState<Set<string>>(new Set());
   useEffect(() => onSoundsChange(setSounds), []);
   /** 確認待ちの PC の操作（もう一度タップすると実行） */
@@ -375,6 +378,16 @@ export default function App() {
     return deck.pages.find((p) => p.id === id) ?? roots[0] ?? null;
   }, [deck, stack, roots]);
 
+  const obsConf = deck?.obs?.enabled ? deck.obs : null;
+  useEffect(() => {
+    obs.configure(obsConf ? { url: obsConf.url, password: obsConf.password } : null);
+  }, [obsConf?.url, obsConf?.password, !!obsConf]);
+  /** 依存配列で比べられるよう JSON 文字列にする */
+  const obsInputs = JSON.stringify([...new Set(deck?.pages.flatMap((p) => p.buttons.map((b) => (b.action.type === "obs" && b.action.command === "mute" ? b.action.input : ""))).filter(Boolean))]);
+  useEffect(() => {
+    if (obsState.status === "connected") void obs.watchMute(JSON.parse(obsInputs));
+  }, [obsState.status, obsInputs]);
+
   const infos = new Set(page?.buttons.map((b) => b.info).filter(Boolean));
   const needsClock = infos.size > 0;
   const needsStats = STATS_INFO.some((k) => infos.has(k));
@@ -458,16 +471,30 @@ export default function App() {
         return false;
       }
     }
-    if (!runsInBackend(a)) return;
-    if (a.type === "system" && CONFIRM_SYSTEM.includes(a.command)) {
+    const confirmLabel = a.type === "system" && CONFIRM_SYSTEM.includes(a.command) ? SYSTEM_LABELS[a.command] : a.type === "obs" && a.command === "stream" ? (obsState.streaming ? "配信を終了" : "配信を開始") : null;
+    if (confirmLabel) {
       const c = confirming.current;
       if (!c || c.id !== runId || Date.now() - c.at > CONFIRM_MS) {
         confirming.current = { id: runId, at: Date.now() };
-        showToast(`もう一度タップすると${SYSTEM_LABELS[a.command]}します`);
+        showToast(`もう一度タップすると${confirmLabel}します`);
         return false;
       }
       confirming.current = null;
     }
+    if (a.type === "obs") {
+      try {
+        await runObs(a);
+        setFlash({ id: b.id, ok: true });
+        return true;
+      } catch (e) {
+        setFlash({ id: b.id, ok: false });
+        showToast(e instanceof Error ? e.message : String(e));
+        return false;
+      } finally {
+        window.setTimeout(() => setFlash(null), 350);
+      }
+    }
+    if (!runsInBackend(a)) return;
     let ok = true;
     try {
       const msg = await api.runAction(a, runId);
@@ -481,6 +508,49 @@ export default function App() {
     window.setTimeout(() => setFlash(null), 350);
     window.setTimeout(refreshStates, 300);
     return ok;
+  };
+
+  const runObs = (a: Extract<Action, { type: "obs" }>) => {
+    switch (a.command) {
+      case "scene":
+        return obs.request("SetCurrentProgramScene", { sceneName: a.scene });
+      case "record":
+        return obs.request("ToggleRecord");
+      case "record_pause":
+        return obs.request("ToggleRecordPause");
+      case "stream":
+        return obs.request("ToggleStream");
+      case "virtualcam":
+        return obs.request("ToggleVirtualCam");
+      case "replay":
+        return obs.request("ToggleReplayBuffer");
+      case "replay_save":
+        return obs.request("SaveReplayBuffer");
+      case "mute":
+        return obs.request("ToggleInputMute", { inputName: a.input });
+    }
+  };
+
+  const obsActive = (a: Extract<Action, { type: "obs" }>): "active" | "alert" | null => {
+    const o = obsState;
+    switch (a.command) {
+      case "scene":
+        return o.scene === a.scene ? "active" : null;
+      case "record":
+        return o.recording ? "alert" : null;
+      case "record_pause":
+        return o.recordPaused ? "active" : null;
+      case "stream":
+        return o.streaming ? "alert" : null;
+      case "virtualcam":
+        return o.virtualcam ? "active" : null;
+      case "replay":
+        return o.replayBuffer ? "active" : null;
+      case "mute":
+        return o.muted[a.input] ? "alert" : null;
+      default:
+        return null;
+    }
   };
 
   const tapTimer = (id: string, a: Extract<Action, { type: "timer" }>) => {
@@ -673,6 +743,10 @@ export default function App() {
     const c = ["key"];
     if (a.type === "mic_mute" && states.micMuted) c.push("alert");
     if (a.type === "now_playing") c.push("now-playing");
+    if (a.type === "obs") {
+      const s = obsActive(a);
+      if (s) c.push(s);
+    }
     if (a.type === "audio_device" && a.deviceIds.length === 1 && a.deviceIds[0] === states.defaultOutput) c.push("active");
     if (flash?.id === b.id) c.push(flash.ok ? "fired" : "failed");
     if (moving === b.id) c.push("moving");

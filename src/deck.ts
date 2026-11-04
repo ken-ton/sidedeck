@@ -29,6 +29,7 @@ export type Action =
   /** seconds はタイマーの長さ（ストップウォッチでは使わない） */
   | { type: "timer"; mode: "timer" | "stopwatch"; seconds: number; sound: boolean }
   | { type: "sound"; path: string; volume: number; retap: SoundRetap }
+  | { type: "obs"; command: ObsCommand; scene: string; input: string }
   /** repeat が 0 なら停止されるまで繰り返す */
   | { type: "macro"; steps: MacroStep[]; repeat: number }
   /** app は小文字のプロセス名、monitor はモニターのデバイスパス */
@@ -154,7 +155,7 @@ export type HoldType = Hold["type"];
 export type ToggleState = { label: string; icon: Icon; color: string | null; action: Action };
 
 /** それ自体が状態を持つ操作や、画面内で完結する操作はトグルにしない */
-const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing"];
+const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing", "obs"];
 
 export const canToggle = (a: Action) => !NO_TOGGLE.includes(a.type);
 
@@ -173,7 +174,7 @@ export const REPEAT_INTERVALS = [50, 100, 200, 500];
 export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin", "timer"];
 
 /** 連打できない種類（繰り返すと開閉や開始・停止を往復してしまう） */
-const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system", "timer", "sound", "now_playing"];
+const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system", "timer", "sound", "now_playing", "obs"];
 
 export function holdTypesFor(action: Action): HoldType[] {
   const types: HoldType[] = [];
@@ -202,6 +203,8 @@ export type DeckData = {
   autoSwitch?: boolean;
   /** 絵文字のアイコンを白黒で表示する */
   monoEmoji?: boolean;
+  /** OBS 連携（obs-websocket）。パスワードは config.json に平文で保存する */
+  obs?: { enabled: boolean; url: string; password: string };
   /** デッキを前面に出す／下げるショートカット。未設定なら DEFAULT_TOGGLE_SHORTCUT、空配列なら無効 */
   toggleShortcut?: string[];
 };
@@ -227,6 +230,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   sound: "サウンド",
   macro: "マクロ",
   window: "ウィンドウ操作",
+  obs: "OBS",
   plugin: "プラグイン",
 };
 
@@ -235,7 +239,7 @@ export const ACTION_GROUPS: { label: string; types: ActionType[] }[] = [
   { label: "キー入力", types: ["hotkey", "text", "macro"] },
   { label: "音声・システム", types: ["media", "now_playing", "mic_mute", "audio_device", "system_panel", "system"] },
   { label: "ツール", types: ["timer", "sound"] },
-  { label: "拡張", types: ["plugin"] },
+  { label: "連携", types: ["obs", "plugin"] },
 ];
 
 export const WINDOW_LABELS: Record<WindowCommand, string> = {
@@ -260,6 +264,19 @@ export const SYSTEM_LABELS: Record<SystemCommand, string> = {
 
 /** 誤タップを防ぐため、もう一度タップしたら実行する */
 export const CONFIRM_SYSTEM: SystemCommand[] = ["sign_out", "restart", "shutdown"];
+
+export type ObsCommand = "scene" | "record" | "record_pause" | "stream" | "virtualcam" | "replay" | "replay_save" | "mute";
+
+export const OBS_LABELS: Record<ObsCommand, string> = {
+  scene: "シーンを切り替え",
+  record: "録画の開始 / 停止",
+  record_pause: "録画の一時停止 / 再開",
+  stream: "配信の開始 / 終了",
+  virtualcam: "仮想カメラの開始 / 停止",
+  replay: "リプレイバッファの開始 / 停止",
+  replay_save: "リプレイを保存",
+  mute: "音声のミュート",
+};
 
 export type SoundRetap = "stop" | "restart" | "overlap";
 
@@ -319,6 +336,8 @@ export function emptyAction(type: ActionType): Action {
       return { type, command: "lock" };
     case "timer":
       return { type, mode: "timer", seconds: 180, sound: true };
+    case "obs":
+      return { type, command: "scene", scene: "", input: "" };
     case "sound":
       return { type, path: "", volume: 100, retap: "stop" };
     case "plugin":
@@ -328,7 +347,7 @@ export function emptyAction(type: ActionType): Action {
   }
 }
 
-export const runsInBackend = (a: Action) => !["none", "page", "system_panel", "timer", "sound"].includes(a.type);
+export const runsInBackend = (a: Action) => !["none", "page", "system_panel", "timer", "sound", "obs"].includes(a.type);
 
 const btn = (slot: number, label: string, emoji: string, action: Action, color: string | null = null): DeckButton => ({
   id: uid(),
