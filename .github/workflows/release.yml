@@ -50,7 +50,10 @@ jobs:
           releaseName: SideDeck ${{ github.ref_name }}
           releaseBody: |
             Windows 用のインストーラー（`SideDeck_<バージョン>_x64-setup.exe`）をダウンロードして実行してください。
-            インストーラーには署名がないため、Windows SmartScreen の警告が表示されることがあります。
+            コード署名は SignPath Foundation に申請中です。承認されるまでは署名がないため、Windows SmartScreen の警告が表示されることがあります。
+
+            Download and run the Windows installer (`SideDeck_<version>_x64-setup.exe`).
+            We have applied for free code signing from [SignPath Foundation](https://signpath.org). Until it is approved, the installer is not signed and Windows SmartScreen may show a warning.
 
             [Code signing policy](https://github.com/ken-ton/sidedeck#code-signing-policy)
           releaseDraft: false

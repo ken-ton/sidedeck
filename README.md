@@ -2,6 +2,16 @@
 
 [![CI](https://github.com/ken-ton/sidedeck/actions/workflows/ci.yml/badge.svg)](https://github.com/ken-ton/sidedeck/actions/workflows/ci.yml)
 
+**English** — SideDeck is a Windows app that turns a touchscreen monitor attached to your PC (such as a portable display) into a full-screen, Stream Deck-style grid of buttons.
+Buttons can launch apps and games, send keyboard shortcuts that reach games, control media and audio devices, manage windows, and run recorded macros.
+Tapping a button never takes focus away from the active app or game, and pages can switch automatically based on the foreground application.
+It can be extended with out-of-process plugins, and is built with Tauri (Rust) and React.
+
+- Requirements: Windows 10 / 11 (x64)
+- Download: the installer `SideDeck_<version>_x64-setup.exe` is on the [Releases](https://github.com/ken-ton/sidedeck/releases) page.
+- Code signing: we have applied for free code signing from [SignPath Foundation](https://signpath.org). Until it is approved, the installer is not signed. See the [Code signing policy](#code-signing-policy).
+- The rest of this README is in Japanese.
+
 デスクトップ PC にタッチ対応モバイルモニターをつなぎ、
 Stream Deck のような**タッチ操作のボタンパネル**として使うための Windows アプリです。
 スマホやタブレットをネットワーク越しにつなぐのではなく、同じ PC につないだタッチモニターで動き、ゲームのフォーカスを奪いません。
@@ -46,7 +56,7 @@ Tauri 2（Rust）＋ React / TypeScript で作っています。
 
 [Releases](https://github.com/ken-ton/sidedeck/releases) から `SideDeck_<バージョン>_x64-setup.exe` をダウンロードして実行します。
 管理者権限は不要で、現在のユーザーにインストールされます。
-インストーラーには署名がないため、Windows SmartScreen の警告が表示されることがあります。
+インストーラーのコード署名は SignPath Foundation に申請中です（[Code signing policy](#code-signing-policy)）。承認されるまでは署名がないため、Windows SmartScreen の警告が表示されることがあります。
 
 ## 使い方
 

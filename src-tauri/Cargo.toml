@@ -1,7 +1,7 @@
 [package]
 name = "sidedeck"
 version = "0.3.0"
-description = "Steam Deck ライクなタッチ用ランチャー（Windows / モバイルモニター向け）"
+description = "Turn a touchscreen monitor into a Stream Deck-style button panel for Windows"
 authors = ["KT"]
 license = "MIT"
 repository = "https://github.com/ken-ton/sidedeck"
