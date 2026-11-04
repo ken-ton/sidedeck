@@ -218,12 +218,7 @@ fn spawn_process(app: &AppHandle, id: &str) {
         .current_dir(&dir)
         .env("SIDEDECK_PORT", port.to_string())
         .env("SIDEDECK_TOKEN", &token)
-        .env("SIDEDECK_PLUGIN_ID", id)
-        // win-deck 時代のプラグイン向け
-        .env("WINDECK_PORT", port.to_string())
-        .env("WINDECK_TOKEN", &token)
-        .env("WINDECK_PLUGIN_ID", id)
-        .stdin(Stdio::null())
+        .env("SIDEDECK_PLUGIN_ID", id)        .stdin(Stdio::null())
         .creation_flags(CREATE_NO_WINDOW);
     match log.and_then(|f| Ok((f.try_clone()?, f))) {
         Ok((out, err)) => {
