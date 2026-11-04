@@ -327,6 +327,13 @@ h2 {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.key.now-playing img.face-icon {
+  object-fit: cover;
+  border-radius: 6px;
+}
+.key.now-playing .face-label {
+  font-size: clamp(11px, 9cqmin, 18px);
+}
 
 @keyframes wiggle {
   from {

@@ -394,6 +394,11 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
           </>
         )}
         {action.type === "sound" && <SoundFields action={action} onChange={onChange} onSuggestLabel={onSuggestLabel} />}
+        {action.type === "now_playing" && (
+          <p className="hint">
+            再生中の曲名・アーティスト・ジャケット画像をボタンに表示し、タップで再生 / 一時停止します。Spotify・ブラウザなど、Windows のメディア操作に対応したアプリの曲を表示します。
+          </p>
+        )}
         {action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
       </div>
     </>

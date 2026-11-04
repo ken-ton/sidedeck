@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { api, AudioDevice, DeckStatus, PluginButtonState, States, WindowApp } from "./api";
+import { api, AudioDevice, DeckStatus, NowPlaying, PluginButtonState, States, WindowApp } from "./api";
 import { Action, canToggle, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
@@ -285,6 +285,15 @@ export default function App() {
   }, [showToast]);
 
   const refreshStates = useCallback(() => api.getStates().then(setStates).catch(() => {}), []);
+  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
+  const hasNowPlaying = !!deck?.pages.some((p) => p.buttons.some((b) => b.action.type === "now_playing"));
+  useEffect(() => {
+    if (!hasNowPlaying) return;
+    const load = () => api.getNowPlaying().then(setNowPlaying).catch(() => {});
+    load();
+    const t = setInterval(load, 2000);
+    return () => clearInterval(t);
+  }, [hasNowPlaying]);
   const hasAudioButtons = !!deck?.pages.some((p) => p.buttons.some((b) => b.action.type === "audio_device"));
   useEffect(() => {
     refreshStates();
@@ -404,6 +413,10 @@ export default function App() {
 
   /** `runId` はマクロの実行・停止やプラグインの識別に使う。長押しの操作はボタンとは別の id で動かす */
   const run = async (b: DeckButton, a: Action = b.action, runId = b.id, quiet = false) => {
+    if (a.type === "now_playing") {
+      a = { type: "media", command: "play_pause" };
+      window.setTimeout(() => api.getNowPlaying().then(setNowPlaying).catch(() => {}), 300);
+    }
     if (a.type === "page") {
       if (deck.pages.some((p) => p.id === a.pageId)) setStack([...stack, a.pageId]);
       else showToast("フォルダが見つかりません");
@@ -615,6 +628,7 @@ export default function App() {
     const ps = a.type === "plugin" ? pluginStates[b.id] : undefined;
     if (ps?.sub) return ps.sub;
     if (a.type === "mic_mute" && states.micMuted) return "ミュート中";
+    if (a.type === "now_playing") return nowPlaying ? `${nowPlaying.playing ? "" : "⏸ "}${nowPlaying.artist}` : "再生していません";
     if (a.type === "audio_device" && a.deviceIds.length !== 1) return outputs.find((d) => d.id === states.defaultOutput)?.name ?? null;
     if (a.type === "page") return "📁";
     if (a.type === "macro") return runningMacros.has(b.id) ? "実行中…" : null;
@@ -626,10 +640,15 @@ export default function App() {
     }
     return null;
   };
+  const overrideFor = (b: DeckButton) => {
+    if (b.action.type === "plugin") return pluginStates[b.id];
+    if (b.action.type === "now_playing" && nowPlaying) return { title: nowPlaying.title, icon: nowPlaying.thumbnail };
+  };
   const classFor = (b: DeckButton) => {
     const a = b.action;
     const c = ["key"];
     if (a.type === "mic_mute" && states.micMuted) c.push("alert");
+    if (a.type === "now_playing") c.push("now-playing");
     if (a.type === "audio_device" && a.deviceIds.length === 1 && a.deviceIds[0] === states.defaultOutput) c.push("active");
     if (flash?.id === b.id) c.push(flash.ok ? "fired" : "failed");
     if (moving === b.id) c.push("moving");
@@ -728,7 +747,7 @@ export default function App() {
               onPointerCancel={() => pressEnd(b, true)}
               onLostPointerCapture={() => pressEnd(b, true)}
             >
-              <ButtonFace button={face} sub={subFor(b)} override={b.action.type === "plugin" ? pluginStates[b.id] : undefined} />
+              <ButtonFace button={face} sub={subFor(b)} override={overrideFor(b)} />
             </button>
           );
         })}

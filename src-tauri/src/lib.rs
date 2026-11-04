@@ -7,6 +7,7 @@ mod games;
 mod icons;
 mod input;
 mod macros;
+mod nowplaying;
 mod plugins;
 mod shortcuts;
 mod system;
@@ -405,6 +406,11 @@ async fn take_startup_warning(app: AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
+async fn get_now_playing() -> Option<nowplaying::NowPlaying> {
+    tauri::async_runtime::spawn_blocking(|| nowplaying::get().ok().flatten()).await.ok().flatten()
+}
+
+#[tauri::command]
 async fn get_states() -> States {
     States { mic_muted: audio::mic_muted(), default_output: audio::default_output_id() }
 }
@@ -657,6 +663,7 @@ pub fn run() {
             start_key_recording,
             stop_key_recording,
             get_states,
+            get_now_playing,
             list_audio_outputs,
             get_icon,
             list_installed_games,

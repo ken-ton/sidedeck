@@ -55,6 +55,9 @@ features = [
   "Win32_System_JobObjects",
   "Win32_UI_Shell_PropertiesSystem",
   "Win32_Devices_FunctionDiscovery",
+  "Foundation",
+  "Media_Control",
+  "Storage_Streams",
 ]
 
 [profile.release]

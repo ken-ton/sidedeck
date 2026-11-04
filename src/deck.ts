@@ -21,6 +21,7 @@ export type Action =
   | { type: "text"; text: string }
   | { type: "media"; command: MediaCommand }
   | { type: "mic_mute" }
+  | { type: "now_playing" }
   | { type: "audio_device"; deviceIds: string[] }
   | { type: "page"; pageId: string }
   | { type: "system_panel" }
@@ -64,7 +65,7 @@ export type HoldType = Hold["type"];
 export type ToggleState = { label: string; icon: Icon; color: string | null; action: Action };
 
 /** それ自体が状態を持つ操作や、画面内で完結する操作はトグルにしない */
-const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound"];
+const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing"];
 
 export const canToggle = (a: Action) => !NO_TOGGLE.includes(a.type);
 
@@ -83,7 +84,7 @@ export const REPEAT_INTERVALS = [50, 100, 200, 500];
 export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin", "timer"];
 
 /** 連打できない種類（繰り返すと開閉や開始・停止を往復してしまう） */
-const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system", "timer", "sound"];
+const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system", "timer", "sound", "now_playing"];
 
 export function holdTypesFor(action: Action): HoldType[] {
   const types: HoldType[] = [];
@@ -128,6 +129,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   text: "文字を入力",
   media: "メディア操作",
   mic_mute: "マイクのミュート",
+  now_playing: "再生中の曲",
   audio_device: "出力デバイスの切替",
   page: "フォルダを開く",
   system_panel: "システムパネル",
@@ -142,7 +144,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
 export const ACTION_GROUPS: { label: string; types: ActionType[] }[] = [
   { label: "開く・移動", types: ["launch", "page", "window"] },
   { label: "キー入力", types: ["hotkey", "text", "macro"] },
-  { label: "音声・システム", types: ["media", "mic_mute", "audio_device", "system_panel", "system"] },
+  { label: "音声・システム", types: ["media", "now_playing", "mic_mute", "audio_device", "system_panel", "system"] },
   { label: "ツール", types: ["timer", "sound"] },
   { label: "拡張", types: ["plugin"] },
 ];
