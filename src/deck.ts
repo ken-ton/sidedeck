@@ -53,7 +53,58 @@ export type DeckButton = {
   shortcut?: string[];
   /** 時刻や PC の使用率をボタンに表示する */
   info?: InfoKind;
+  /** 未指定は 1×1。slot は左上のマス */
+  size?: ButtonSize;
 };
+
+export type ButtonSize = "1x1" | "2x1" | "1x2" | "2x2";
+export const BUTTON_SIZES: ButtonSize[] = ["1x1", "2x1", "1x2", "2x2"];
+export const SIZE_LABELS: Record<ButtonSize, string> = { "1x1": "1×1", "2x1": "横 2×1", "1x2": "縦 1×2", "2x2": "2×2" };
+
+export const sizeOf = (size: ButtonSize | undefined) => {
+  const [w, h] = (size ?? "1x1").split("x").map(Number);
+  return { w, h };
+};
+
+/** ボタンが占めるマス。グリッドからはみ出すときは null */
+export function cellsOf(slot: number, size: ButtonSize | undefined, columns: number, rows: number): number[] | null {
+  const { w, h } = sizeOf(size);
+  const col = slot % columns;
+  const row = Math.floor(slot / columns);
+  if (col + w > columns || row + h > rows) return null;
+  const cells: number[] = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) cells.push((row + y) * columns + col + x);
+  return cells;
+}
+
+/** マス → そのマスを占めるボタン */
+export function occupancy(buttons: DeckButton[], columns: number, rows: number, ignore?: string): Map<number, DeckButton> {
+  const m = new Map<number, DeckButton>();
+  for (const b of buttons) {
+    if (b.id === ignore) continue;
+    for (const c of cellsOf(b.slot, b.size, columns, rows) ?? [b.slot]) m.set(c, b);
+  }
+  return m;
+}
+
+export function fits(page: Page, columns: number, rows: number, slot: number, size: ButtonSize | undefined, ignore?: string) {
+  const cells = cellsOf(slot, size, columns, rows);
+  if (!cells) return false;
+  const used = occupancy(page.buttons, columns, rows, ignore);
+  return cells.every((c) => !used.has(c));
+}
+
+/** グリッドの大きさを変えたときに、はみ出すか重なるボタンの数 */
+export function misplacedButtons(page: Page, columns: number, rows: number): number {
+  const used = new Set<number>();
+  let n = 0;
+  for (const b of page.buttons) {
+    const cells = cellsOf(b.slot, b.size, columns, rows);
+    if (!cells || cells.some((c) => used.has(c))) n++;
+    cells?.forEach((c) => used.add(c));
+  }
+  return n;
+}
 
 export type InfoKind = "time" | "time_seconds" | "date" | "cpu" | "memory" | "gpu";
 
@@ -414,11 +465,11 @@ export function cloneButton(b: DeckButton, pages: Page[], slot: number): { butto
 }
 
 /** `from` 以降で最初の空き。なければ先頭から探す */
-export function firstEmptySlot(page: Page, slots: number, from = 0): number | null {
-  const used = new Set(page.buttons.map((b) => b.slot));
+export function firstEmptySlot(page: Page, columns: number, rows: number, from = 0, size?: ButtonSize): number | null {
+  const slots = columns * rows;
   for (let i = 0; i < slots; i++) {
     const s = (from + i) % slots;
-    if (!used.has(s)) return s;
+    if (fits(page, columns, rows, s, size)) return s;
   }
   return null;
 }

@@ -3,7 +3,7 @@ import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { api, Config, DeckStatus, MonitorInfo, PluginInfo } from "./api";
-import { DEFAULT_TOGGLE_SHORTCUT, type DeckData } from "./deck";
+import { DEFAULT_TOGGLE_SHORTCUT, misplacedButtons, type DeckData } from "./deck";
 import ShortcutField from "./ShortcutField";
 
 type Props = {
@@ -45,10 +45,9 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
   const toggleDeck = () => (status.active ? api.deckExit() : api.deckEnter()).catch((e) => onError(String(e)));
 
   const resize = (columns: number, rows: number) => {
-    const max = columns * rows;
-    const lost = deck.pages.reduce((n, p) => n + p.buttons.filter((b) => b.slot >= max).length, 0);
+    const lost = deck.pages.reduce((n, p) => n + misplacedButtons(p, columns, rows), 0);
     if (lost > 0) {
-      onError(`${lost} 個のボタンがはみ出すため変更できません。先に移動か削除をしてください。`);
+      onError(`${lost} 個のボタンがはみ出すか重なるため変更できません。先に移動・縮小・削除をしてください。`);
       return;
     }
     onDeckChange({ ...deck, columns, rows });

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, AudioDevice, DeckStatus, NowPlaying, PluginButtonState, States, WindowApp } from "./api";
-import { Action, canToggle, formatInfo, Stats, STATS_INFO, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
+import { Action, canToggle, formatInfo, Stats, STATS_INFO, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
@@ -528,17 +528,21 @@ export default function App() {
     }
   };
 
+  /** 空いていればそこへ移動し、ボタンがあれば入れ替える。大きいボタンが収まらないときは動かさない */
   const moveTo = (slot: number) => {
     const src = page.buttons.find((b) => b.id === moving);
     setMoving(null);
-    if (!src || src.slot === slot) return;
-    updatePage(page.id, (p) => ({
-      ...p,
-      buttons: p.buttons.map((b) => (b.id === src.id ? { ...b, slot } : b.slot === slot ? { ...b, slot: src.slot } : b)),
-    }));
+    if (!src) return;
+    const target = occupancy(page.buttons, deck.columns, deck.rows, src.id).get(slot);
+    const to = target ? target.slot : slot;
+    if (to === src.slot) return;
+    const buttons = page.buttons.map((b) => (b.id === src.id ? { ...b, slot: to } : b.id === target?.id ? { ...b, slot: src.slot } : b));
+    if (misplacedButtons({ ...page, buttons }, deck.columns, deck.rows) > 0) return showToast("大きさが合わないため、ここには移動できません");
+    updatePage(page.id, (p) => ({ ...p, buttons }));
   };
 
   const placeClone = (source: DeckButton, sourcePages: Page[], slot: number) => {
+    if (!fits(page, deck.columns, deck.rows, slot, source.size)) return showToast("ボタンが大きいため、ここには置けません");
     const { button, pages: added } = cloneButton(source, sourcePages, slot);
     updatePage(
       page.id,
@@ -548,7 +552,7 @@ export default function App() {
   };
 
   const duplicate = (b: DeckButton) => {
-    const slot = firstEmptySlot(page, deck.columns * deck.rows, b.slot + 1);
+    const slot = firstEmptySlot(page, deck.columns, deck.rows, b.slot + 1, b.size);
     if (slot === null) return showToast("このページに空きがないため複製できません");
     placeClone(b, deck.pages, slot);
     setEditor(null);
@@ -686,6 +690,11 @@ export default function App() {
 
   const slots = deck.columns * deck.rows;
   const bySlot = new Map(page.buttons.map((b) => [b.slot, b]));
+  const covered = occupancy(page.buttons, deck.columns, deck.rows);
+  const place = (slot: number, size?: DeckButton["size"]) => {
+    const { w, h } = sizeOf(size);
+    return { gridColumn: `${(slot % deck.columns) + 1} / span ${w}`, gridRow: `${Math.floor(slot / deck.columns) + 1} / span ${h}` };
+  };
 
   return (
     <div className={`app ${editing ? "is-editing" : ""} ${deck.monoEmoji ? "mono-emoji" : ""}`}>
@@ -748,9 +757,10 @@ export default function App() {
       <main className="grid" style={{ gridTemplateColumns: `repeat(${deck.columns}, 1fr)`, gridTemplateRows: `repeat(${deck.rows}, 1fr)` }}>
         {Array.from({ length: slots }, (_, slot) => {
           const b = bySlot.get(slot);
+          if (!b && covered.has(slot)) return null;
           if (!b) {
             return (
-              <button key={`empty-${slot}`} className={`key empty ${editing ? "editable" : ""}`} onClick={() => tapSlot(slot)} disabled={!editing}>
+              <button key={`empty-${slot}`} className={`key empty ${editing ? "editable" : ""}`} style={place(slot)} onClick={() => tapSlot(slot)} disabled={!editing}>
                 {editing && <span className="plus">{clipboard && !moving ? "📋" : "＋"}</span>}
               </button>
             );
@@ -760,7 +770,7 @@ export default function App() {
             <button
               key={b.id}
               className={classFor(b)}
-              style={face.color ? { background: face.color } : undefined}
+              style={{ ...place(slot, b.size), ...(face.color ? { background: face.color } : {}) }}
               onClick={() => tapSlot(slot, b)}
               onPointerDown={(e) => pressStart(e, b)}
               onPointerUp={() => pressEnd(b, false)}
@@ -788,6 +798,7 @@ export default function App() {
           onCopy={() => copy(editor.button)}
           shortcutError={shortcutErrors[editor.button.id] ?? null}
           shortcutUserOf={(keys) => shortcutUser(deck, keys, editor.button.id)}
+          sizeFits={(size) => fits(page, deck.columns, deck.rows, editor.button.slot, size, editor.button.id)}
           onClose={() => setEditor(null)}
           onError={showToast}
         />

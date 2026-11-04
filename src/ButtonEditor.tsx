@@ -20,6 +20,9 @@ import {
   uid,
   INFO_LABELS,
   InfoKind,
+  BUTTON_SIZES,
+  ButtonSize,
+  SIZE_LABELS,
 } from "./deck";
 import ActionEditor, { NEW_FOLDER, validateAction } from "./ActionEditor";
 import ButtonFace from "./ButtonFace";
@@ -36,6 +39,8 @@ type Props = {
   onCopy: () => void;
   shortcutError: string | null;
   shortcutUserOf: (keys: string[] | undefined) => string | null;
+  /** 今の位置にその大きさで収まるか */
+  sizeFits: (size: ButtonSize) => boolean;
   onClose: () => void;
   onError: (msg: string) => void;
 };
@@ -141,7 +146,7 @@ function ToggleSection({ button, folders, onChange, onError }: { button: DeckBut
   );
 }
 
-export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, onMove, onDuplicate, onCopy, shortcutError, shortcutUserOf, onClose, onError }: Props) {
+export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, onMove, onDuplicate, onCopy, shortcutError, shortcutUserOf, sizeFits, onClose, onError }: Props) {
   const [b, setB] = useState<DeckButton>(initial);
   const [confirmDelete, setConfirmDelete] = useState(false);
   /** 自動で入れた名前。ユーザーが書き換えていなければ、次の候補で置き換える */
@@ -239,6 +244,23 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
             </div>
           </div>
         </div>
+
+        <section>
+          <h2>大きさ</h2>
+          <div className="chips wrap">
+            {BUTTON_SIZES.map((size) => (
+              <button
+                key={size}
+                className={(b.size ?? "1x1") === size ? "on" : ""}
+                disabled={!sizeFits(size)}
+                onClick={() => setB({ ...b, size: size === "1x1" ? undefined : size })}
+              >
+                {SIZE_LABELS[size]}
+              </button>
+            ))}
+          </div>
+          {BUTTON_SIZES.some((size) => !sizeFits(size)) && <p className="hint">右や下にボタンがあるか、端にあるため選べない大きさがあります。空けるか、ボタンを移動してください。</p>}
+        </section>
 
         <section>
           <h2>表示（任意）</h2>
