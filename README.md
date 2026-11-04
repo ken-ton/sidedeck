@@ -9,7 +9,7 @@ It can be extended with out-of-process plugins, and is built with Tauri (Rust) a
 
 - Requirements: Windows 10 / 11 (x64)
 - Download: the installer `SideDeck_<version>_x64-setup.exe` is on the [Releases](https://github.com/ken-ton/sidedeck/releases) page.
-- Code signing: we have applied for free code signing from [SignPath Foundation](https://signpath.org). Until it is approved, the installer is not signed. See the [Code signing policy](#code-signing-policy).
+- Code signing: the installer is not signed, so Windows SmartScreen may show a warning.
 - The rest of this README is in Japanese.
 
 デスクトップ PC にタッチ対応モバイルモニターをつなぎ、
@@ -57,7 +57,7 @@ Tauri 2（Rust）＋ React / TypeScript で作っています。
 
 [Releases](https://github.com/ken-ton/sidedeck/releases) から `SideDeck_<バージョン>_x64-setup.exe` をダウンロードして実行します。
 管理者権限は不要で、現在のユーザーにインストールされます。
-インストーラーのコード署名は SignPath Foundation に申請中です（[Code signing policy](#code-signing-policy)）。承認されるまでは署名がないため、Windows SmartScreen の警告が表示されることがあります。
+インストーラーにはコード署名がないため、Windows SmartScreen の警告が表示されることがあります。
 
 ## 使い方
 
@@ -123,20 +123,7 @@ cargo test -- --ignored --nocapture       # 実機のモニター・音声デバ
 2. `v<バージョン>` のタグ（例: `v0.2.3`）を付けて push します。
 3. GitHub Actions がテストとビルドを行い、インストーラー付きのリリースを作成します。タグとバージョンが一致しないときは失敗します。
 
-## Code signing policy
-
-> 署名は現在 SignPath Foundation に申請中です。承認されるまで、リリースのインストーラーには署名がありません。
-
-Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
-
-Only release builds produced by the [Release workflow](.github/workflows/release.yml) on GitHub-hosted runners, from tags in this repository, are submitted for signing. Every signing request is approved manually.
-
-Team roles:
-
-- Committers and reviewers: [ken-ton](https://github.com/ken-ton)
-- Approvers: [ken-ton](https://github.com/ken-ton)
-
-### Privacy policy
+## Privacy policy
 
 This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
 
