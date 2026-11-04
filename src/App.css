@@ -293,6 +293,16 @@ h2 {
   font-size: 38cqmin;
   line-height: 1;
 }
+.face-icon.emoji.mono,
+.mono-emoji .face-icon.emoji.color {
+  display: none;
+}
+.mono-emoji .face-icon.emoji.mono {
+  display: inline;
+  font-family: "Segoe UI Symbol", "Segoe UI Emoji", sans-serif;
+  font-variant-emoji: text;
+  filter: grayscale(1);
+}
 .face-label {
   max-width: 100%;
   font-size: clamp(12px, 11cqmin, 22px);

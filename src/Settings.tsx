@@ -155,6 +155,14 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
         </section>
 
         <section>
+          <label className="switch-row">
+            <span>絵文字のアイコンを白黒で表示する</span>
+            <input type="checkbox" className="switch" checked={!!deck.monoEmoji} onChange={(e) => onDeckChange({ ...deck, monoEmoji: e.target.checked })} />
+          </label>
+          <p className="hint">カラーの絵文字と白黒の記号が混ざらないよう、すべて白黒の記号にそろえます。白黒の形がない新しい絵文字は、グレーで表示します。</p>
+        </section>
+
+        <section>
           <h2>デッキを前面に出すショートカット</h2>
           <ShortcutField
             value={deck.toggleShortcut ?? DEFAULT_TOGGLE_SHORTCUT}

@@ -107,6 +107,8 @@ export type DeckData = {
   pages: Page[];
   /** 未設定なら有効 */
   autoSwitch?: boolean;
+  /** 絵文字のアイコンを白黒で表示する */
+  monoEmoji?: boolean;
   /** デッキを前面に出す／下げるショートカット。未設定なら DEFAULT_TOGGLE_SHORTCUT、空配列なら無効 */
   toggleShortcut?: string[];
 };

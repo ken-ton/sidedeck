@@ -554,7 +554,7 @@ export default function App() {
   const bySlot = new Map(page.buttons.map((b) => [b.slot, b]));
 
   return (
-    <div className={`app ${editing ? "is-editing" : ""}`}>
+    <div className={`app ${editing ? "is-editing" : ""} ${deck.monoEmoji ? "mono-emoji" : ""}`}>
       <header className="topbar">
         {page.folder ? (
           <div className="tabs">
