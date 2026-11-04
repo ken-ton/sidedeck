@@ -295,6 +295,16 @@ async fn run_action(app: AppHandle, action: actions::Action, button_id: Option<S
 }
 
 #[tauri::command]
+async fn press_keys(keys: Vec<String>) -> CmdResult<()> {
+    input::key_down(&keys)
+}
+
+#[tauri::command]
+async fn release_keys(keys: Vec<String>) -> CmdResult<()> {
+    input::key_up(&keys)
+}
+
+#[tauri::command]
 async fn start_key_recording() -> CmdResult<()> {
     macros::start_recording()
 }
@@ -618,6 +628,8 @@ pub fn run() {
             get_deck,
             save_deck,
             run_action,
+            press_keys,
+            release_keys,
             set_shortcuts,
             take_startup_warning,
             suspend_shortcuts,

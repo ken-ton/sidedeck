@@ -38,9 +38,41 @@ export type DeckButton = {
   icon: Icon;
   color: string | null;
   action: Action;
+  /** 長押ししたときの動作。未設定ならタップと同じ */
+  hold?: Hold;
   /** グローバルショートカット（例: ["ctrl", "alt", "m"]） */
   shortcut?: string[];
 };
+
+export type Hold =
+  | { type: "repeat"; intervalMs: number }
+  /** ショートカットキーの操作でだけ使う */
+  | { type: "press" }
+  | { type: "action"; action: Action };
+
+export type HoldType = Hold["type"];
+
+export const HOLD_LABELS: Record<HoldType, string> = {
+  repeat: "連打",
+  press: "押している間押し続ける",
+  action: "別の操作",
+};
+
+export const REPEAT_INTERVALS = [50, 100, 200, 500];
+
+/** 長押しで「別の操作」に選べない種類。フォルダは作成処理が絡み、プラグインはボタンごとの状態と結び付いているため */
+export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin"];
+
+/** 連打できない種類（繰り返すと開閉や開始・停止を往復してしまう） */
+const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro"];
+
+export function holdTypesFor(action: Action): HoldType[] {
+  const types: HoldType[] = [];
+  if (!NO_REPEAT.includes(action.type)) types.push("repeat");
+  if (action.type === "hotkey") types.push("press");
+  types.push("action");
+  return types;
+}
 
 export type Page = {
   id: string;

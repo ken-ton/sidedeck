@@ -1,31 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, AudioDevice, InstalledGame } from "./api";
-import {
-  Action,
-  ACTION_GROUPS,
-  ACTION_LABELS,
-  ActionType,
-  COLORS,
-  DeckButton,
-  DeckData,
-  emptyAction,
-  formatKeys,
-  keyFromCode,
-  MEDIA_LABELS,
-  MediaCommand,
-  MODIFIERS,
-  Page,
-  uid,
-} from "./deck";
+import { api } from "./api";
+import { Action, ACTION_LABELS, COLORS, DeckButton, DeckData, Hold, HOLD_ACTION_EXCLUDE, HOLD_LABELS, holdTypesFor, HoldType, Page, REPEAT_INTERVALS, uid } from "./deck";
+import ActionEditor, { NEW_FOLDER, validateAction } from "./ActionEditor";
 import ButtonFace from "./ButtonFace";
-import MacroFields from "./MacroFields";
-import WindowFields from "./WindowFields";
 import ShortcutField from "./ShortcutField";
-import PluginFields from "./PluginFields";
-
-/** 新しいフォルダを作るときの仮の pageId */
-const NEW_FOLDER = "__new__";
 
 type Props = {
   initial: DeckButton;
@@ -42,149 +21,48 @@ type Props = {
   onError: (msg: string) => void;
 };
 
-const baseName = (p: string) =>
-  p
-    .split(/[\\/]/)
-    .filter(Boolean)
-    .pop()
-    ?.replace(/\.(exe|lnk|url|bat|cmd)$/i, "") ?? p;
-
-function LaunchFields({
-  action,
-  onChange,
-  onPicked,
-}: {
-  action: Extract<Action, { type: "launch" }>;
-  onChange: (a: Action) => void;
-  onPicked: (target: string, label: string, iconSource: string) => void;
-}) {
-  const [games, setGames] = useState<InstalledGame[] | null>(null);
-
-  const pickFile = async (directory: boolean) => {
-    const path = await open({ multiple: false, directory });
-    if (typeof path === "string") onPicked(path, baseName(path), path);
-  };
-
-  return (
-    <>
-      <label className="field">
-        <span>開くもの（パスか URL）</span>
-        <input
-          value={action.target}
-          placeholder="C:\…\app.exe、https://…、steam://rungameid/…"
-          onChange={(e) => onChange({ ...action, target: e.target.value })}
-        />
-      </label>
-      <div className="chips wrap">
-        <button onClick={() => pickFile(false)}>ファイルを選ぶ</button>
-        <button onClick={() => pickFile(true)}>フォルダを選ぶ</button>
-        <button onClick={() => api.listInstalledGames().then(setGames)}>Steam / Epic から選ぶ</button>
-      </div>
-      {games && (
-        <ul className="picker">
-          {games.length === 0 && <li className="hint">インストール済みのゲームが見つかりません</li>}
-          {games.map((g) => (
-            <li key={g.id}>
-              <button
-                onClick={() => {
-                  onPicked(g.launch, g.title, g.art ?? g.launch);
-                  setGames(null);
-                }}
-              >
-                <span>{g.title}</span>
-                <small>{g.source === "steam" ? "Steam" : "Epic"}</small>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {/\.exe"?$/i.test(action.target.trim()) && (
-        <label className="field">
-          <span>引数（任意）</span>
-          <input value={action.args} onChange={(e) => onChange({ ...action, args: e.target.value })} />
-        </label>
-      )}
-    </>
-  );
+function newHold(type: HoldType): Hold {
+  if (type === "repeat") return { type, intervalMs: 100 };
+  if (type === "press") return { type };
+  return { type, action: { type: "hotkey", keys: [] } };
 }
 
-function HotkeyFields({ action, onChange }: { action: Extract<Action, { type: "hotkey" }>; onChange: (a: Action) => void }) {
-  const recorder = useRef<HTMLInputElement>(null);
-  const [recording, setRecording] = useState(false);
-  const mods = action.keys.filter((k) => (MODIFIERS as readonly string[]).includes(k));
-  const main = action.keys.find((k) => !(MODIFIERS as readonly string[]).includes(k)) ?? "";
-
-  const set = (m: string[], k: string) => onChange({ ...action, keys: [...MODIFIERS.filter((x) => m.includes(x)), ...(k ? [k] : [])] });
-
+function HoldSection({ button, folders, onChange, onError }: { button: DeckButton; folders: Page[]; onChange: (h: Hold | undefined) => void; onError: (msg: string) => void }) {
+  const hold = button.hold;
+  const types = holdTypesFor(button.action);
   return (
-    <>
-      <div className="keys-display">{action.keys.length ? formatKeys(action.keys) : "未設定"}</div>
+    <section>
+      <h2>長押し（任意）</h2>
       <div className="chips wrap">
-        {MODIFIERS.map((m) => (
-          <button key={m} className={mods.includes(m) ? "on" : ""} onClick={() => set(mods.includes(m) ? mods.filter((x) => x !== m) : [...mods, m], main)}>
-            {formatKeys([m])}
+        <button className={!hold ? "on" : ""} onClick={() => onChange(undefined)}>
+          なし
+        </button>
+        {types.map((t) => (
+          <button key={t} className={hold?.type === t ? "on" : ""} onClick={() => hold?.type !== t && onChange(newHold(t))}>
+            {HOLD_LABELS[t]}
           </button>
         ))}
       </div>
-      <label className="field">
-        <span>キー（例: s、f5、space、enter、up）</span>
-        <input value={main} onChange={(e) => set(mods, e.target.value.trim().toLowerCase())} />
-      </label>
-      <button
-        className={`action secondary ${recording ? "on" : ""}`}
-        onClick={() => {
-          setRecording(true);
-          recorder.current?.focus();
-        }}
-      >
-        {recording ? "キーを押してください…" : "キーボードで記録する"}
-      </button>
-      <input
-        ref={recorder}
-        className="recorder"
-        readOnly
-        onBlur={() => setRecording(false)}
-        onKeyDown={(e) => {
-          e.preventDefault();
-          const k = keyFromCode(e.code);
-          if (!k) return; // 修飾キーだけのときは、続けて押されるのを待つ
-          const m = [e.ctrlKey && "ctrl", e.shiftKey && "shift", e.altKey && "alt", e.metaKey && "win"].filter(Boolean) as string[];
-          set(m, k);
-          e.currentTarget.blur();
-        }}
-      />
-      <p className="hint">ゲームにも届くよう、スキャンコードで送信します。管理者権限で動くアプリには送れません。</p>
-    </>
-  );
-}
-
-function AudioDeviceFields({ action, onChange }: { action: Extract<Action, { type: "audio_device" }>; onChange: (a: Action) => void }) {
-  const [devices, setDevices] = useState<AudioDevice[] | null>(null);
-  useEffect(() => {
-    api.listAudioOutputs().then(setDevices).catch(() => setDevices([]));
-  }, []);
-  const toggle = (id: string) =>
-    onChange({ ...action, deviceIds: action.deviceIds.includes(id) ? action.deviceIds.filter((x) => x !== id) : [...action.deviceIds, id] });
-
-  return (
-    <>
-      <p className="hint">
-        1 つだけ選ぶとそのデバイスに切り替えます。複数選ぶと、選んだ順に切り替えます。何も選ばないと、すべての出力デバイスを順番に切り替えます。
-      </p>
-      <ul className="picker">
-        {devices?.map((d) => {
-          const i = action.deviceIds.indexOf(d.id);
-          return (
-            <li key={d.id}>
-              <button className={i >= 0 ? "on" : ""} onClick={() => toggle(d.id)}>
-                <span>{d.name}</span>
-                <small>{i >= 0 ? `${i + 1} 番目` : d.isDefault ? "使用中" : ""}</small>
+      {hold?.type === "repeat" && (
+        <>
+          <p className="hint">押している間、操作を繰り返します。</p>
+          <div className="chips wrap">
+            {REPEAT_INTERVALS.map((ms) => (
+              <button key={ms} className={hold.intervalMs === ms ? "on" : ""} onClick={() => onChange({ type: "repeat", intervalMs: ms })}>
+                {ms} ms ごと
               </button>
-            </li>
-          );
-        })}
-      </ul>
-    </>
+            ))}
+          </div>
+        </>
+      )}
+      {hold?.type === "press" && <p className="hint">指を離すまでキーを押したままにします（プッシュトゥトークや移動キーなど）。</p>}
+      {hold?.type === "action" && (
+        <>
+          <p className="hint">0.5 秒押し続けると、タップとは別の操作を実行します。</p>
+          <ActionEditor action={hold.action} onChange={(action) => onChange({ type: "action", action })} folders={folders} exclude={HOLD_ACTION_EXCLUDE} onError={onError} />
+        </>
+      )}
+    </section>
   );
 }
 
@@ -202,27 +80,21 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
     return !!src;
   };
 
-  const changeType = (type: ActionType) => {
-    if (type === b.action.type) return;
-    setAction(type === "page" ? { type, pageId: folders[0]?.id ?? NEW_FOLDER } : emptyAction(type));
-  };
-
   const save = () => {
     const a = b.action;
-    if (a.type === "launch" && !a.target.trim()) return onError("開くものを指定してください");
-    if (a.type === "hotkey" && !a.keys.some((k) => !(MODIFIERS as readonly string[]).includes(k))) return onError("キーを指定してください");
-    if (a.type === "text" && !a.text) return onError("入力する文字を指定してください");
-    if (a.type === "plugin" && (!a.pluginId || !a.actionId)) return onError("プラグインの操作を選んでください");
-    if (a.type === "window" && a.command === "focus" && !a.app) return onError("前面に出すアプリを指定してください");
-    if (a.type === "window" && a.command === "move_to" && !a.monitor) return onError("移動先のモニターを選んでください");
-    if (a.type === "macro" && a.steps.length === 0) return onError("ステップを 1 つ以上追加してください");
-    if (a.type === "macro" && a.steps.some((s) => (s.type === "keys" || s.type === "key_down" || s.type === "key_up") && s.keys.length === 0))
-      return onError("キーが未設定のステップがあります");
-    let folder: Page | null = null;
+    const error = validateAction(a);
+    if (error) return onError(error);
     let button = b;
+    // 操作の種類を変えて使えなくなった長押しは外す
+    if (button.hold && !holdTypesFor(a).includes(button.hold.type)) button = { ...button, hold: undefined };
+    if (button.hold?.type === "action") {
+      const holdError = validateAction(button.hold.action);
+      if (holdError) return onError(`長押し: ${holdError}`);
+    }
+    let folder: Page | null = null;
     if (a.type === "page" && (a.pageId === NEW_FOLDER || !a.pageId)) {
       folder = { id: uid(), name: b.label || "フォルダ", folder: true, buttons: [] };
-      button = { ...b, action: { type: "page", pageId: folder.id } };
+      button = { ...button, action: { type: "page", pageId: folder.id } };
     }
     if (!button.label && !button.icon) button = { ...button, label: ACTION_LABELS[a.type] };
     onSave(button, folder);
@@ -289,78 +161,26 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
 
         <section>
           <h2>操作</h2>
-          {ACTION_GROUPS.map((g) => (
-            <div key={g.label} className="action-group">
-              <h3>{g.label}</h3>
-              <div className="chips wrap">
-                {g.types.map((t) => (
-                  <button key={t} className={b.action.type === t ? "on" : ""} onClick={() => changeType(t)}>
-                    {ACTION_LABELS[t]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+          <ActionEditor
+            action={b.action}
+            onChange={setAction}
+            folders={folders}
+            onError={onError}
+            onPicked={(target, label, iconSource) => {
+              setB((x) => ({ ...x, label: x.label || label, action: { type: "launch", target, args: "" } }));
+              fetchIcon(iconSource);
+            }}
+            onSuggestLabel={(label) =>
+              setB((x) => {
+                if (x.label && x.label !== suggested.current) return x;
+                suggested.current = label;
+                return { ...x, label };
+              })
+            }
+          />
         </section>
 
-        <section className="action-fields">
-          {b.action.type === "launch" && (
-            <LaunchFields
-              action={b.action}
-              onChange={setAction}
-              onPicked={(target, label, iconSource) => {
-                setB((x) => ({ ...x, label: x.label || label, action: { type: "launch", target, args: "" } }));
-                fetchIcon(iconSource);
-              }}
-            />
-          )}
-          {b.action.type === "hotkey" && <HotkeyFields action={b.action} onChange={setAction} />}
-          {b.action.type === "text" && (
-            <label className="field">
-              <span>入力する文字</span>
-              <textarea rows={3} value={b.action.text} onChange={(e) => setAction({ type: "text", text: e.target.value })} />
-            </label>
-          )}
-          {b.action.type === "media" && (
-            <div className="chips wrap">
-              {(Object.keys(MEDIA_LABELS) as MediaCommand[]).map((c) => (
-                <button key={c} className={b.action.type === "media" && b.action.command === c ? "on" : ""} onClick={() => setAction({ type: "media", command: c })}>
-                  {MEDIA_LABELS[c]}
-                </button>
-              ))}
-            </div>
-          )}
-          {b.action.type === "mic_mute" && <p className="hint">既定のマイクのミュートを切り替えます。ミュート中はボタンが赤くなります。</p>}
-          {b.action.type === "audio_device" && <AudioDeviceFields action={b.action} onChange={setAction} />}
-          {b.action.type === "page" && (
-            <div className="chips wrap">
-              {folders.map((f) => (
-                <button key={f.id} className={b.action.type === "page" && b.action.pageId === f.id ? "on" : ""} onClick={() => setAction({ type: "page", pageId: f.id })}>
-                  📁 {f.name}
-                </button>
-              ))}
-              <button className={b.action.type === "page" && b.action.pageId === NEW_FOLDER ? "on" : ""} onClick={() => setAction({ type: "page", pageId: NEW_FOLDER })}>
-                ＋ 新しいフォルダ
-              </button>
-            </div>
-          )}
-          {b.action.type === "window" && <WindowFields action={b.action} onChange={setAction} />}
-          {b.action.type === "plugin" && (
-            <PluginFields
-              action={b.action}
-              onChange={setAction}
-              onSuggestLabel={(label) =>
-                setB((x) => {
-                  if (x.label && x.label !== suggested.current) return x;
-                  suggested.current = label;
-                  return { ...x, label };
-                })
-              }
-            />
-          )}
-          {b.action.type === "macro" && <MacroFields action={b.action} onChange={setAction} onError={onError} />}
-          {b.action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
-        </section>
+        <HoldSection button={b} folders={folders} onChange={(hold) => setB((x) => ({ ...x, hold }))} onError={onError} />
 
         <section>
           <h2>キーボードショートカット（任意）</h2>

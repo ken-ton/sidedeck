@@ -1,11 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, AudioDevice, DeckStatus, PluginButtonState, States, WindowApp } from "./api";
-import { cloneButton, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, TOGGLE_SHORTCUT_ID, uid } from "./deck";
+import { Action, cloneButton, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, TOGGLE_SHORTCUT_ID, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
 import SystemPanel from "./SystemPanel";
+
+const HOLD_MS = 500;
+const REPEAT_DELAY_MS = 400;
+
+type Press = { id: string; timers: number[]; intervals: number[]; fired: boolean; release?: () => void };
+
+function stopPress(p: Press) {
+  p.timers.forEach((t) => window.clearTimeout(t));
+  p.intervals.forEach((t) => window.clearInterval(t));
+  p.release?.();
+}
 
 function Clock() {
   const [now, setNow] = useState(new Date());
@@ -146,6 +157,9 @@ export default function App() {
   const runShortcut = useRef<(id: string) => void>(() => {});
   /** プラグインが setState で送ってきた見た目（ボタンの id → 状態） */
   const [pluginStates, setPluginStates] = useState<Record<string, PluginButtonState>>({});
+  /** 長押しを設定したボタンを押している間の状態 */
+  const press = useRef<Press | null>(null);
+  const [pressed, setPressed] = useState<string | null>(null);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -283,6 +297,18 @@ export default function App() {
     return deck.pages.find((p) => p.id === id) ?? roots[0] ?? null;
   }, [deck, stack, roots]);
 
+  // 押している間にページが切り替わるとボタンが消えて pointerup が届かないので、ここで離す
+  useEffect(
+    () => () => {
+      const p = press.current;
+      if (!p) return;
+      press.current = null;
+      setPressed(null);
+      stopPress(p);
+    },
+    [page?.id, editing],
+  );
+
   useEffect(() => {
     if (!deck || !foreground || editing || deck.autoSwitch === false) return;
     const current = stack.length ? stack : roots[0] ? [roots[0].id] : [];
@@ -309,8 +335,8 @@ export default function App() {
   const updatePage = (pageId: string, fn: (p: Page) => Page, extra: (d: DeckData) => DeckData = (d) => d) =>
     commit(extra({ ...deck, pages: deck.pages.map((p) => (p.id === pageId ? fn(p) : p)) }));
 
-  const run = async (b: DeckButton) => {
-    const a = b.action;
+  /** `runId` はマクロの実行・停止やプラグインの識別に使う。長押しの操作はボタンとは別の id で動かす */
+  const run = async (b: DeckButton, a: Action = b.action, runId = b.id, quiet = false) => {
     if (a.type === "page") {
       if (deck.pages.some((p) => p.id === a.pageId)) setStack([...stack, a.pageId]);
       else showToast("フォルダが見つかりません");
@@ -319,9 +345,9 @@ export default function App() {
     if (a.type === "system_panel") return setOverlay("system");
     if (!runsInBackend(a)) return;
     try {
-      const msg = await api.runAction(a, b.id);
+      const msg = await api.runAction(a, runId);
       setFlash({ id: b.id, ok: true });
-      if (msg) showToast(msg);
+      if (msg && !quiet) showToast(msg);
     } catch (e) {
       setFlash({ id: b.id, ok: false });
       showToast(String(e));
@@ -369,8 +395,45 @@ export default function App() {
     setEditor(null);
   };
 
+  const pressStart = (e: React.PointerEvent<HTMLButtonElement>, b: DeckButton) => {
+    const hold = b.hold;
+    if (editing || !hold || press.current) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const p: Press = { id: b.id, timers: [], intervals: [], fired: false };
+    press.current = p;
+    setPressed(b.id);
+    if (hold.type === "repeat") {
+      p.fired = true;
+      run(b);
+      p.timers.push(window.setTimeout(() => p.intervals.push(window.setInterval(() => run(b, b.action, b.id, true), hold.intervalMs)), REPEAT_DELAY_MS));
+    } else if (hold.type === "press" && b.action.type === "hotkey") {
+      const keys = b.action.keys;
+      p.fired = true;
+      api.pressKeys(keys).catch((err) => showToast(String(err)));
+      p.release = () => void api.releaseKeys(keys).catch(() => {});
+    } else if (hold.type === "action") {
+      p.timers.push(
+        window.setTimeout(() => {
+          p.fired = true;
+          run(b, hold.action, `${b.id}:hold`);
+        }, HOLD_MS),
+      );
+    }
+  };
+
+  /** `cancelled` なら、まだ何も実行していなくてもタップとして扱わない */
+  const pressEnd = (b: DeckButton, cancelled: boolean) => {
+    const p = press.current;
+    if (!p || p.id !== b.id) return;
+    press.current = null;
+    setPressed(null);
+    stopPress(p);
+    if (!p.fired && !cancelled) run(b);
+  };
+
   const tapSlot = (slot: number, b?: DeckButton) => {
-    if (!editing) return b && run(b);
+    // 長押しを設定したボタンは pointer イベントで処理する
+    if (!editing) return b && !b.hold && run(b);
     if (moving) return moveTo(slot);
     if (!b && clipboard) return placeClone(clipboard.button, clipboard.pages, slot);
     setEditor(
@@ -428,6 +491,7 @@ export default function App() {
     if (a.type === "audio_device" && a.deviceIds.length === 1 && a.deviceIds[0] === states.defaultOutput) c.push("active");
     if (flash?.id === b.id) c.push(flash.ok ? "fired" : "failed");
     if (moving === b.id) c.push("moving");
+    if (pressed === b.id) c.push("pressed");
     if (runningMacros.has(b.id)) c.push("running");
     const ps = a.type === "plugin" ? pluginStates[b.id] : undefined;
     if (ps?.state === "active") c.push("active");
@@ -507,7 +571,16 @@ export default function App() {
             );
           }
           return (
-            <button key={b.id} className={classFor(b)} style={b.color ? { background: b.color } : undefined} onClick={() => tapSlot(slot, b)}>
+            <button
+              key={b.id}
+              className={classFor(b)}
+              style={b.color ? { background: b.color } : undefined}
+              onClick={() => tapSlot(slot, b)}
+              onPointerDown={(e) => pressStart(e, b)}
+              onPointerUp={() => pressEnd(b, false)}
+              onPointerCancel={() => pressEnd(b, true)}
+              onLostPointerCapture={() => pressEnd(b, true)}
+            >
               <ButtonFace button={b} sub={subFor(b)} override={b.action.type === "plugin" ? pluginStates[b.id] : undefined} />
             </button>
           );
