@@ -1,7 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api, AudioDevice, InstalledGame } from "./api";
-import { Action, ACTION_GROUPS, ACTION_LABELS, ActionType, emptyAction, formatKeys, keyFromCode, MEDIA_LABELS, MediaCommand, MODIFIERS, Page } from "./deck";
+import {
+  Action,
+  ACTION_GROUPS,
+  ACTION_LABELS,
+  ActionType,
+  CONFIRM_SYSTEM,
+  emptyAction,
+  formatKeys,
+  keyFromCode,
+  MEDIA_LABELS,
+  MediaCommand,
+  MODIFIERS,
+  Page,
+  SYSTEM_LABELS,
+  SystemCommand,
+} from "./deck";
 import MacroFields from "./MacroFields";
 import WindowFields from "./WindowFields";
 import PluginFields from "./PluginFields";
@@ -205,6 +220,7 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
       })}
 
       <div className="action-fields">
+        <h3 className="action-fields-title">{ACTION_LABELS[action.type]}の設定</h3>
         {action.type === "launch" && (
           <LaunchFields
             action={action}
@@ -245,6 +261,18 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
         {action.type === "window" && <WindowFields action={action} onChange={onChange} />}
         {action.type === "plugin" && <PluginFields action={action} onChange={onChange} onSuggestLabel={onSuggestLabel ?? (() => {})} />}
         {action.type === "macro" && <MacroFields action={action} onChange={onChange} onError={onError} />}
+        {action.type === "system" && (
+          <>
+            <div className="chips wrap">
+              {(Object.keys(SYSTEM_LABELS) as SystemCommand[]).map((c) => (
+                <button key={c} className={action.command === c ? "on" : ""} onClick={() => onChange({ type: "system", command: c })}>
+                  {SYSTEM_LABELS[c]}
+                </button>
+              ))}
+            </div>
+            {CONFIRM_SYSTEM.includes(action.command) && <p className="hint">誤って押さないよう、3 秒以内にもう一度タップしたときに実行します。</p>}
+          </>
+        )}
         {action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
       </div>
     </>

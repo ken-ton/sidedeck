@@ -128,6 +128,21 @@ h2 {
   overflow: visible;
   margin-bottom: 8px;
 }
+.action-fields {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+}
+.action-fields-title {
+  font-size: 0.85rem;
+  color: var(--text);
+  margin: 0 0 10px;
+}
+.action-fields > :last-child {
+  margin-bottom: 0;
+}
 .sub-heading {
   font-size: 0.85rem;
   font-weight: normal;

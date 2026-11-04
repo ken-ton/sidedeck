@@ -36,6 +36,8 @@ pub enum Action {
         #[serde(default)]
         settings: serde_json::Value,
     },
+    /// command は system::run_command を参照
+    System { command: String },
     /// command: focus / move_next / move_to / maximize / minimize
     Window {
         command: String,
@@ -135,6 +137,7 @@ pub fn run(app: &tauri::AppHandle, action: Action, button_id: Option<String>) ->
         Action::Plugin { plugin_id, action_id, settings } => {
             crate::plugins::key_down(app, &plugin_id, &action_id, button_id.as_deref().unwrap_or_default(), settings).map(|_| None)
         }
+        Action::System { command } => crate::system::run_command(&command),
         Action::Window { command, app: name, launch, monitor } => match command.as_str() {
             "focus" => crate::winops::focus_app(app, &name, &launch),
             "move_next" => {

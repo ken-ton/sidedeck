@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, AudioDevice, DeckStatus, PluginButtonState, States, WindowApp } from "./api";
-import { Action, canToggle, cloneButton, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
+import { Action, canToggle, cloneButton, CONFIRM_SYSTEM, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
@@ -9,6 +9,7 @@ import SystemPanel from "./SystemPanel";
 
 const HOLD_MS = 500;
 const REPEAT_DELAY_MS = 400;
+const CONFIRM_MS = 3000;
 
 type Press = { id: string; timers: number[]; intervals: number[]; fired: boolean; release?: () => void };
 
@@ -170,6 +171,8 @@ export default function App() {
   /** 長押しを設定したボタンを押している間の状態 */
   const press = useRef<Press | null>(null);
   const [pressed, setPressed] = useState<string | null>(null);
+  /** 確認待ちの PC の操作（もう一度タップすると実行） */
+  const confirming = useRef<{ id: string; at: number } | null>(null);
   /** オンになっているトグルボタンの id */
   const [toggled, setToggled] = useState<Set<string>>(loadToggled);
   useEffect(() => {
@@ -363,6 +366,15 @@ export default function App() {
     }
     if (a.type === "system_panel") return setOverlay("system");
     if (!runsInBackend(a)) return;
+    if (a.type === "system" && CONFIRM_SYSTEM.includes(a.command)) {
+      const c = confirming.current;
+      if (!c || c.id !== runId || Date.now() - c.at > CONFIRM_MS) {
+        confirming.current = { id: runId, at: Date.now() };
+        showToast(`もう一度タップすると${SYSTEM_LABELS[a.command]}します`);
+        return false;
+      }
+      confirming.current = null;
+    }
     let ok = true;
     try {
       const msg = await api.runAction(a, runId);

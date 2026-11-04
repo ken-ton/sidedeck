@@ -4,6 +4,8 @@ export type MediaCommand = "play_pause" | "next" | "prev" | "stop" | "volume_up"
 
 export type WindowCommand = "focus" | "move_next" | "move_to" | "maximize" | "minimize";
 
+export type SystemCommand = "lock" | "sleep" | "monitor_off" | "empty_recycle_bin" | "screenshot" | "snip" | "sign_out" | "restart" | "shutdown";
+
 export type MacroStep =
   | { type: "keys"; keys: string[] }
   | { type: "key_down"; keys: string[] }
@@ -22,6 +24,7 @@ export type Action =
   | { type: "audio_device"; deviceIds: string[] }
   | { type: "page"; pageId: string }
   | { type: "system_panel" }
+  | { type: "system"; command: SystemCommand }
   /** repeat が 0 なら停止されるまで繰り返す */
   | { type: "macro"; steps: MacroStep[]; repeat: number }
   /** app は小文字のプロセス名、monitor はモニターのデバイスパス */
@@ -58,7 +61,7 @@ export type HoldType = Hold["type"];
 export type ToggleState = { label: string; icon: Icon; color: string | null; action: Action };
 
 /** それ自体が状態を持つ操作や、画面内で完結する操作はトグルにしない */
-const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute"];
+const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system"];
 
 export const canToggle = (a: Action) => !NO_TOGGLE.includes(a.type);
 
@@ -77,7 +80,7 @@ export const REPEAT_INTERVALS = [50, 100, 200, 500];
 export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin"];
 
 /** 連打できない種類（繰り返すと開閉や開始・停止を往復してしまう） */
-const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro"];
+const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system"];
 
 export function holdTypesFor(action: Action): HoldType[] {
   const types: HoldType[] = [];
@@ -123,6 +126,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   audio_device: "出力デバイスの切替",
   page: "フォルダを開く",
   system_panel: "システムパネル",
+  system: "PC の操作",
   macro: "マクロ",
   window: "ウィンドウ操作",
   plugin: "プラグイン",
@@ -131,7 +135,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
 export const ACTION_GROUPS: { label: string; types: ActionType[] }[] = [
   { label: "開く・移動", types: ["launch", "page", "window"] },
   { label: "キー入力", types: ["hotkey", "text", "macro"] },
-  { label: "音声・システム", types: ["media", "mic_mute", "audio_device", "system_panel"] },
+  { label: "音声・システム", types: ["media", "mic_mute", "audio_device", "system_panel", "system"] },
   { label: "拡張", types: ["plugin"] },
 ];
 
@@ -142,6 +146,21 @@ export const WINDOW_LABELS: Record<WindowCommand, string> = {
   maximize: "最大化の切替",
   minimize: "最小化",
 };
+
+export const SYSTEM_LABELS: Record<SystemCommand, string> = {
+  lock: "PC をロック",
+  sleep: "スリープ",
+  monitor_off: "画面をオフ",
+  empty_recycle_bin: "ごみ箱を空にする",
+  screenshot: "スクリーンショット（全画面を保存）",
+  snip: "画面の切り取り",
+  sign_out: "サインアウト",
+  restart: "再起動",
+  shutdown: "シャットダウン",
+};
+
+/** 誤タップを防ぐため、もう一度タップしたら実行する */
+export const CONFIRM_SYSTEM: SystemCommand[] = ["sign_out", "restart", "shutdown"];
 
 export const windowAction = (command: WindowCommand): Action => ({ type: "window", command, app: "", launch: "", monitor: "" });
 
@@ -175,6 +194,8 @@ export function emptyAction(type: ActionType): Action {
       return { type, steps: [], repeat: 1 };
     case "window":
       return windowAction("move_next");
+    case "system":
+      return { type, command: "lock" };
     case "plugin":
       return { type, pluginId: "", actionId: "", settings: {} };
     default:

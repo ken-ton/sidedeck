@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api";
-import { Action, ACTION_LABELS, formatKeys, MacroStep, MEDIA_LABELS, MediaCommand, parseKeys, WINDOW_LABELS, windowAction, WindowCommand } from "./deck";
+import { Action, ACTION_LABELS, formatKeys, MacroStep, MEDIA_LABELS, MediaCommand, parseKeys, SYSTEM_LABELS, WINDOW_LABELS, windowAction, WindowCommand } from "./deck";
 
 type MacroAction = Extract<Action, { type: "macro" }>;
 
@@ -21,7 +21,7 @@ function describe(s: MacroStep): string {
     case "action": {
       const a = s.action;
       const detail =
-        a.type === "media" ? MEDIA_LABELS[a.command] : a.type === "launch" ? a.target : a.type === "window" ? WINDOW_LABELS[a.command] + (a.app ? ` ${a.app}` : "") : "";
+        a.type === "media" ? MEDIA_LABELS[a.command] : a.type === "system" ? SYSTEM_LABELS[a.command] : a.type === "launch" ? a.target : a.type === "window" ? WINDOW_LABELS[a.command] + (a.app ? ` ${a.app}` : "") : "";
       return `操作: ${ACTION_LABELS[a.type]}${detail ? `（${detail}）` : ""}`;
     }
   }

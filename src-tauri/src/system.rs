@@ -101,3 +101,43 @@ pub fn set_power_plan(id: &str) -> Result<(), String> {
     }
     Ok(())
 }
+
+/// command: lock / sleep / monitor_off / empty_recycle_bin / screenshot / snip / sign_out / restart / shutdown
+pub fn run_command(command: &str) -> Result<Option<String>, String> {
+    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{HWND_BROADCAST, PostMessageW, SC_MONITORPOWER, WM_SYSCOMMAND};
+
+    let shutdown = |args: &[&str]| {
+        std::process::Command::new("shutdown")
+            .args(args)
+            .spawn()
+            .map(|_| None)
+            .map_err(|e| format!("実行できませんでした: {e}"))
+    };
+    match command {
+        "lock" => unsafe { windows::Win32::System::Shutdown::LockWorkStation() }.map(|_| None).map_err(|e| e.to_string()),
+        "sleep" => {
+            // 戻ってくるのは復帰後なので、待たない
+            std::thread::spawn(|| unsafe {
+                let _ = SetSuspendState(false, false, false);
+            });
+            Ok(None)
+        }
+        // 2 は電源オフ。どの画面も、タッチやマウスの操作で復帰する
+        "monitor_off" => unsafe { PostMessageW(Some(HWND_BROADCAST), WM_SYSCOMMAND, WPARAM(SC_MONITORPOWER as usize), LPARAM(2)) }
+            .map(|_| None)
+            .map_err(|e| e.to_string()),
+        "empty_recycle_bin" => {
+            use windows::Win32::UI::Shell::{SHERB_NOCONFIRMATION, SHERB_NOPROGRESSUI, SHERB_NOSOUND, SHEmptyRecycleBinW};
+            // 空のときも失敗が返るので、結果は見ない
+            let _ = unsafe { SHEmptyRecycleBinW(None, None, SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND) };
+            Ok(Some("ごみ箱を空にしました".into()))
+        }
+        "screenshot" => crate::input::send_keys(&["win".into(), "printscreen".into()]).map(|_| Some("ピクチャの「スクリーンショット」フォルダに保存しました".into())),
+        "snip" => crate::input::send_keys(&["win".into(), "shift".into(), "s".into()]).map(|_| None),
+        "sign_out" => shutdown(&["/l"]),
+        "restart" => shutdown(&["/r", "/t", "0"]),
+        "shutdown" => shutdown(&["/s", "/t", "0"]),
+        other => Err(format!("未対応の PC の操作です: {other}")),
+    }
+}
