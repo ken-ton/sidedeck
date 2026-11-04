@@ -14,8 +14,10 @@ import {
   MediaCommand,
   MODIFIERS,
   Page,
+  formatDuration,
   SYSTEM_LABELS,
   SystemCommand,
+  TIMER_PRESETS,
 } from "./deck";
 import MacroFields from "./MacroFields";
 import WindowFields from "./WindowFields";
@@ -38,6 +40,7 @@ export function validateAction(a: Action): string | null {
   if (a.type === "plugin" && (!a.pluginId || !a.actionId)) return "プラグインの操作を選んでください";
   if (a.type === "window" && a.command === "focus" && !a.app) return "前面に出すアプリを指定してください";
   if (a.type === "window" && a.command === "move_to" && !a.monitor) return "移動先のモニターを選んでください";
+  if (a.type === "timer" && a.mode === "timer" && a.seconds <= 0) return "タイマーの長さを指定してください";
   if (a.type === "macro" && a.steps.length === 0) return "ステップを 1 つ以上追加してください";
   if (a.type === "macro" && a.steps.some((s) => (s.type === "keys" || s.type === "key_down" || s.type === "key_up") && s.keys.length === 0))
     return "キーが未設定のステップがあります";
@@ -271,6 +274,59 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
               ))}
             </div>
             {CONFIRM_SYSTEM.includes(action.command) && <p className="hint">誤って押さないよう、3 秒以内にもう一度タップしたときに実行します。</p>}
+          </>
+        )}
+        {action.type === "timer" && (
+          <>
+            <div className="chips wrap">
+              <button className={action.mode === "timer" ? "on" : ""} onClick={() => onChange({ ...action, mode: "timer" })}>
+                タイマー
+              </button>
+              <button className={action.mode === "stopwatch" ? "on" : ""} onClick={() => onChange({ ...action, mode: "stopwatch" })}>
+                ストップウォッチ
+              </button>
+            </div>
+            {action.mode === "timer" ? (
+              <>
+                <div className="chips wrap">
+                  {TIMER_PRESETS.map((s) => (
+                    <button key={s} className={action.seconds === s ? "on" : ""} onClick={() => onChange({ ...action, seconds: s })}>
+                      {s < 60 ? `${s} 秒` : `${s / 60} 分`}
+                    </button>
+                  ))}
+                </div>
+                <div className="icon-row">
+                  <label className="field">
+                    <span>分</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={Math.floor(action.seconds / 60)}
+                      onChange={(e) => onChange({ ...action, seconds: Math.max(0, Number(e.target.value) || 0) * 60 + (action.seconds % 60) })}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>秒</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={action.seconds % 60}
+                      onChange={(e) => onChange({ ...action, seconds: Math.floor(action.seconds / 60) * 60 + Math.min(59, Math.max(0, Number(e.target.value) || 0)) })}
+                    />
+                  </label>
+                </div>
+                <label className="switch-row">
+                  <span>時間になったら音を鳴らす</span>
+                  <input type="checkbox" className="switch" checked={action.sound} onChange={(e) => onChange({ ...action, sound: e.target.checked })} />
+                </label>
+                <p className="hint">
+                  タップで開始し、動いている間にタップすると止めます。{formatDuration(action.seconds * 1000)} たつとボタンが点滅します。点滅中にタップすると元に戻ります。
+                </p>
+              </>
+            ) : (
+              <p className="hint">タップするたびに、開始 → 一時停止 → リセットの順に切り替わります。</p>
+            )}
           </>
         )}
         {action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}

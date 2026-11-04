@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, AudioDevice, DeckStatus, PluginButtonState, States, WindowApp } from "./api";
-import { Action, canToggle, cloneButton, CONFIRM_SYSTEM, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
+import { Action, canToggle, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
@@ -20,6 +20,25 @@ function loadToggled(): Set<string> {
     return new Set(JSON.parse(localStorage.getItem(TOGGLED_KEY) ?? "[]"));
   } catch {
     return new Set();
+  }
+}
+
+/** startedAt が null なら止まっている。durationMs はタイマーのときだけ */
+type TimerState = { startedAt: number | null; elapsed: number; durationMs: number | null; done: boolean; sound: boolean };
+
+const timerElapsed = (t: TimerState, now: number) => t.elapsed + (t.startedAt === null ? 0 : now - t.startedAt);
+
+function beep(ctx: AudioContext) {
+  for (let i = 0; i < 3; i++) {
+    const at = ctx.currentTime + i * 0.35;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = 880;
+    gain.gain.setValueAtTime(0.25, at);
+    gain.gain.exponentialRampToValueAtTime(0.001, at + 0.25);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(at);
+    osc.stop(at + 0.25);
   }
 }
 
@@ -171,6 +190,29 @@ export default function App() {
   /** 長押しを設定したボタンを押している間の状態 */
   const press = useRef<Press | null>(null);
   const [pressed, setPressed] = useState<string | null>(null);
+  const [timers, setTimers] = useState<Record<string, TimerState>>({});
+  const timersRef = useRef(timers);
+  timersRef.current = timers;
+  const [now, setNow] = useState(Date.now());
+  /** 音はタップ（ユーザー操作）の中で作ったコンテキストでないと鳴らないことがある */
+  const audio = useRef<AudioContext | null>(null);
+  const anyTimerRunning = Object.values(timers).some((t) => t.startedAt !== null);
+  useEffect(() => {
+    if (!anyTimerRunning) return;
+    const id = window.setInterval(() => {
+      const t = Date.now();
+      setNow(t);
+      const finished = Object.entries(timersRef.current).filter(([, s]) => s.startedAt !== null && s.durationMs !== null && timerElapsed(s, t) >= s.durationMs);
+      if (!finished.length) return;
+      if (finished.some(([, s]) => s.sound) && audio.current) beep(audio.current);
+      setTimers((prev) => {
+        const next = { ...prev };
+        for (const [id] of finished) if (next[id]) next[id] = { ...next[id], startedAt: null, elapsed: next[id].durationMs ?? 0, done: true };
+        return next;
+      });
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [anyTimerRunning]);
   /** 確認待ちの PC の操作（もう一度タップすると実行） */
   const confirming = useRef<{ id: string; at: number } | null>(null);
   /** オンになっているトグルボタンの id */
@@ -365,6 +407,10 @@ export default function App() {
       return;
     }
     if (a.type === "system_panel") return setOverlay("system");
+    if (a.type === "timer") {
+      tapTimer(b.id, a);
+      return true;
+    }
     if (!runsInBackend(a)) return;
     if (a.type === "system" && CONFIRM_SYSTEM.includes(a.command)) {
       const c = confirming.current;
@@ -388,6 +434,28 @@ export default function App() {
     window.setTimeout(() => setFlash(null), 350);
     window.setTimeout(refreshStates, 300);
     return ok;
+  };
+
+  const tapTimer = (id: string, a: Extract<Action, { type: "timer" }>) => {
+    if (a.sound && !audio.current) audio.current = new AudioContext();
+    void audio.current?.resume();
+    const t = Date.now();
+    setNow(t);
+    setTimers((prev) => {
+      const cur = prev[id];
+      const next = { ...prev };
+      if (a.mode === "timer") {
+        if (cur) delete next[id];
+        else next[id] = { startedAt: t, elapsed: 0, durationMs: a.seconds * 1000, done: false, sound: a.sound };
+      } else if (!cur) {
+        next[id] = { startedAt: t, elapsed: 0, durationMs: null, done: false, sound: false };
+      } else if (cur.startedAt !== null) {
+        next[id] = { ...cur, startedAt: null, elapsed: timerElapsed(cur, t) };
+      } else {
+        delete next[id];
+      }
+      return next;
+    });
   };
 
   const isOn = (b: DeckButton) => !!b.toggle && canToggle(b.action) && toggled.has(b.id);
@@ -532,6 +600,12 @@ export default function App() {
     if (a.type === "audio_device" && a.deviceIds.length !== 1) return outputs.find((d) => d.id === states.defaultOutput)?.name ?? null;
     if (a.type === "page") return "📁";
     if (a.type === "macro") return runningMacros.has(b.id) ? "実行中…" : null;
+    if (a.type === "timer") {
+      const t = timers[b.id];
+      if (a.mode === "stopwatch") return formatDuration(t ? timerElapsed(t, now) : 0, true);
+      if (t?.done) return "時間です";
+      return formatDuration(t ? Math.ceil(((t.durationMs ?? 0) - timerElapsed(t, now)) / 1000) * 1000 : a.seconds * 1000);
+    }
     return null;
   };
   const classFor = (b: DeckButton) => {
@@ -544,6 +618,8 @@ export default function App() {
     if (pressed === b.id) c.push("pressed");
     if (isOn(b)) c.push("active");
     if (runningMacros.has(b.id)) c.push("running");
+    if (a.type === "timer" && timers[b.id]?.startedAt != null) c.push("running");
+    if (a.type === "timer" && timers[b.id]?.done) c.push("blink");
     const ps = a.type === "plugin" ? pluginStates[b.id] : undefined;
     if (ps?.state === "active") c.push("active");
     if (ps?.state === "alert") c.push("alert");

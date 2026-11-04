@@ -25,6 +25,8 @@ export type Action =
   | { type: "page"; pageId: string }
   | { type: "system_panel" }
   | { type: "system"; command: SystemCommand }
+  /** seconds はタイマーの長さ（ストップウォッチでは使わない） */
+  | { type: "timer"; mode: "timer" | "stopwatch"; seconds: number; sound: boolean }
   /** repeat が 0 なら停止されるまで繰り返す */
   | { type: "macro"; steps: MacroStep[]; repeat: number }
   /** app は小文字のプロセス名、monitor はモニターのデバイスパス */
@@ -61,7 +63,7 @@ export type HoldType = Hold["type"];
 export type ToggleState = { label: string; icon: Icon; color: string | null; action: Action };
 
 /** それ自体が状態を持つ操作や、画面内で完結する操作はトグルにしない */
-const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system"];
+const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer"];
 
 export const canToggle = (a: Action) => !NO_TOGGLE.includes(a.type);
 
@@ -77,10 +79,10 @@ export const HOLD_LABELS: Record<HoldType, string> = {
 export const REPEAT_INTERVALS = [50, 100, 200, 500];
 
 /** 長押しで「別の操作」に選べない種類。フォルダは作成処理が絡み、プラグインはボタンごとの状態と結び付いているため */
-export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin"];
+export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin", "timer"];
 
 /** 連打できない種類（繰り返すと開閉や開始・停止を往復してしまう） */
-const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system"];
+const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system", "timer"];
 
 export function holdTypesFor(action: Action): HoldType[] {
   const types: HoldType[] = [];
@@ -129,6 +131,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   page: "フォルダを開く",
   system_panel: "システムパネル",
   system: "PC の操作",
+  timer: "タイマー",
   macro: "マクロ",
   window: "ウィンドウ操作",
   plugin: "プラグイン",
@@ -138,6 +141,7 @@ export const ACTION_GROUPS: { label: string; types: ActionType[] }[] = [
   { label: "開く・移動", types: ["launch", "page", "window"] },
   { label: "キー入力", types: ["hotkey", "text", "macro"] },
   { label: "音声・システム", types: ["media", "mic_mute", "audio_device", "system_panel", "system"] },
+  { label: "ツール", types: ["timer"] },
   { label: "拡張", types: ["plugin"] },
 ];
 
@@ -163,6 +167,18 @@ export const SYSTEM_LABELS: Record<SystemCommand, string> = {
 
 /** 誤タップを防ぐため、もう一度タップしたら実行する */
 export const CONFIRM_SYSTEM: SystemCommand[] = ["sign_out", "restart", "shutdown"];
+
+export const TIMER_PRESETS = [30, 60, 180, 300, 600];
+
+export const formatDuration = (ms: number, tenths = false) => {
+  const total = Math.max(0, ms);
+  const s = Math.floor(total / 1000);
+  const h = Math.floor(s / 3600);
+  const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  const t = tenths ? `.${Math.floor((total % 1000) / 100)}` : "";
+  return h ? `${h}:${mm}:${ss}${t}` : `${mm}:${ss}${t}`;
+};
 
 export const windowAction = (command: WindowCommand): Action => ({ type: "window", command, app: "", launch: "", monitor: "" });
 
@@ -198,6 +214,8 @@ export function emptyAction(type: ActionType): Action {
       return windowAction("move_next");
     case "system":
       return { type, command: "lock" };
+    case "timer":
+      return { type, mode: "timer", seconds: 180, sound: true };
     case "plugin":
       return { type, pluginId: "", actionId: "", settings: {} };
     default:
@@ -205,7 +223,7 @@ export function emptyAction(type: ActionType): Action {
   }
 }
 
-export const runsInBackend = (a: Action) => !["none", "page", "system_panel"].includes(a.type);
+export const runsInBackend = (a: Action) => !["none", "page", "system_panel", "timer"].includes(a.type);
 
 const btn = (slot: number, label: string, emoji: string, action: Action, color: string | null = null): DeckButton => ({
   id: uid(),
