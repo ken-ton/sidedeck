@@ -40,6 +40,8 @@ export type DeckButton = {
   action: Action;
   /** 長押ししたときの動作。未設定ならタップと同じ */
   hold?: Hold;
+  /** オン状態の見た目と、オンのときにタップしたら実行する操作 */
+  toggle?: ToggleState;
   /** グローバルショートカット（例: ["ctrl", "alt", "m"]） */
   shortcut?: string[];
 };
@@ -51,6 +53,17 @@ export type Hold =
   | { type: "action"; action: Action };
 
 export type HoldType = Hold["type"];
+
+/** label・icon・color が空なら、オフ状態のものを使う */
+export type ToggleState = { label: string; icon: Icon; color: string | null; action: Action };
+
+/** それ自体が状態を持つ操作や、画面内で完結する操作はトグルにしない */
+const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute"];
+
+export const canToggle = (a: Action) => !NO_TOGGLE.includes(a.type);
+
+export const toggledFace = (b: DeckButton): DeckButton =>
+  b.toggle ? { ...b, label: b.toggle.label || b.label, icon: b.toggle.icon ?? b.icon, color: b.toggle.color ?? b.color } : b;
 
 export const HOLD_LABELS: Record<HoldType, string> = {
   repeat: "連打",

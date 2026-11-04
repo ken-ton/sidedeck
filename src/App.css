@@ -128,6 +128,12 @@ h2 {
   overflow: visible;
   margin-bottom: 8px;
 }
+.sub-heading {
+  font-size: 0.85rem;
+  font-weight: normal;
+  color: var(--muted);
+  margin: 16px 0 8px;
+}
 .action-group h3 {
   font-size: 0.8rem;
   font-weight: normal;

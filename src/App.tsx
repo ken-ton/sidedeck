@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, AudioDevice, DeckStatus, PluginButtonState, States, WindowApp } from "./api";
-import { Action, cloneButton, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, TOGGLE_SHORTCUT_ID, uid } from "./deck";
+import { Action, canToggle, cloneButton, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
@@ -11,6 +11,16 @@ const HOLD_MS = 500;
 const REPEAT_DELAY_MS = 400;
 
 type Press = { id: string; timers: number[]; intervals: number[]; fired: boolean; release?: () => void };
+
+const TOGGLED_KEY = "sidedeck.toggled";
+
+function loadToggled(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(TOGGLED_KEY) ?? "[]"));
+  } catch {
+    return new Set();
+  }
+}
 
 function stopPress(p: Press) {
   p.timers.forEach((t) => window.clearTimeout(t));
@@ -160,6 +170,15 @@ export default function App() {
   /** 長押しを設定したボタンを押している間の状態 */
   const press = useRef<Press | null>(null);
   const [pressed, setPressed] = useState<string | null>(null);
+  /** オンになっているトグルボタンの id */
+  const [toggled, setToggled] = useState<Set<string>>(loadToggled);
+  useEffect(() => {
+    try {
+      localStorage.setItem(TOGGLED_KEY, JSON.stringify([...toggled]));
+    } catch {
+      // 保存できなくても、起動している間は切り替えられる
+    }
+  }, [toggled]);
 
   const showToast = useCallback((msg: string) => {
     setToast(msg);
@@ -344,22 +363,41 @@ export default function App() {
     }
     if (a.type === "system_panel") return setOverlay("system");
     if (!runsInBackend(a)) return;
+    let ok = true;
     try {
       const msg = await api.runAction(a, runId);
       setFlash({ id: b.id, ok: true });
       if (msg && !quiet) showToast(msg);
     } catch (e) {
+      ok = false;
       setFlash({ id: b.id, ok: false });
       showToast(String(e));
     }
     window.setTimeout(() => setFlash(null), 350);
     window.setTimeout(refreshStates, 300);
+    return ok;
+  };
+
+  const isOn = (b: DeckButton) => !!b.toggle && canToggle(b.action) && toggled.has(b.id);
+
+  /** トグルボタンは、操作に成功したときだけオンとオフを切り替える */
+  const tap = async (b: DeckButton) => {
+    if (!b.toggle || !canToggle(b.action)) return void run(b);
+    const on = toggled.has(b.id);
+    const ok = await run(b, on ? b.toggle.action : b.action, on ? `${b.id}:toggle` : b.id);
+    if (!ok) return;
+    setToggled((prev) => {
+      const next = new Set(prev);
+      if (on) next.delete(b.id);
+      else next.add(b.id);
+      return next;
+    });
   };
 
   runShortcut.current = (id: string) => {
     for (const p of deck.pages) {
       const b = p.buttons.find((x) => x.id === id);
-      if (b) return void run(b);
+      if (b) return void tap(b);
     }
   };
 
@@ -433,7 +471,7 @@ export default function App() {
 
   const tapSlot = (slot: number, b?: DeckButton) => {
     // 長押しを設定したボタンは pointer イベントで処理する
-    if (!editing) return b && !b.hold && run(b);
+    if (!editing) return b && !b.hold && tap(b);
     if (moving) return moveTo(slot);
     if (!b && clipboard) return placeClone(clipboard.button, clipboard.pages, slot);
     setEditor(
@@ -492,6 +530,7 @@ export default function App() {
     if (flash?.id === b.id) c.push(flash.ok ? "fired" : "failed");
     if (moving === b.id) c.push("moving");
     if (pressed === b.id) c.push("pressed");
+    if (isOn(b)) c.push("active");
     if (runningMacros.has(b.id)) c.push("running");
     const ps = a.type === "plugin" ? pluginStates[b.id] : undefined;
     if (ps?.state === "active") c.push("active");
@@ -570,18 +609,19 @@ export default function App() {
               </button>
             );
           }
+          const face = isOn(b) ? toggledFace(b) : b;
           return (
             <button
               key={b.id}
               className={classFor(b)}
-              style={b.color ? { background: b.color } : undefined}
+              style={face.color ? { background: face.color } : undefined}
               onClick={() => tapSlot(slot, b)}
               onPointerDown={(e) => pressStart(e, b)}
               onPointerUp={() => pressEnd(b, false)}
               onPointerCancel={() => pressEnd(b, true)}
               onLostPointerCapture={() => pressEnd(b, true)}
             >
-              <ButtonFace button={b} sub={subFor(b)} override={b.action.type === "plugin" ? pluginStates[b.id] : undefined} />
+              <ButtonFace button={face} sub={subFor(b)} override={b.action.type === "plugin" ? pluginStates[b.id] : undefined} />
             </button>
           );
         })}

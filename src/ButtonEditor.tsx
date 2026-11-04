@@ -1,7 +1,24 @@
 import { useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { api } from "./api";
-import { Action, ACTION_LABELS, COLORS, DeckButton, DeckData, Hold, HOLD_ACTION_EXCLUDE, HOLD_LABELS, holdTypesFor, HoldType, Page, REPEAT_INTERVALS, uid } from "./deck";
+import {
+  Action,
+  ACTION_LABELS,
+  canToggle,
+  COLORS,
+  DeckButton,
+  DeckData,
+  Hold,
+  HOLD_ACTION_EXCLUDE,
+  HOLD_LABELS,
+  holdTypesFor,
+  HoldType,
+  Page,
+  REPEAT_INTERVALS,
+  toggledFace,
+  ToggleState,
+  uid,
+} from "./deck";
 import ActionEditor, { NEW_FOLDER, validateAction } from "./ActionEditor";
 import ButtonFace from "./ButtonFace";
 import ShortcutField from "./ShortcutField";
@@ -66,6 +83,62 @@ function HoldSection({ button, folders, onChange, onError }: { button: DeckButto
   );
 }
 
+function ToggleSection({ button, folders, onChange, onError }: { button: DeckButton; folders: Page[]; onChange: (t: ToggleState | undefined) => void; onError: (msg: string) => void }) {
+  const t = button.toggle;
+  return (
+    <section>
+      <h2>トグル（任意）</h2>
+      <div className="chips wrap">
+        <button className={!t ? "on" : ""} onClick={() => onChange(undefined)}>
+          なし
+        </button>
+        <button className={t ? "on" : ""} onClick={() => !t && onChange({ label: "", icon: null, color: null, action: { type: "hotkey", keys: [] } })}>
+          オンとオフを切り替える
+        </button>
+      </div>
+      {t && (
+        <>
+          <p className="hint">タップするたびにオンとオフが切り替わります。オフのときは上の操作を、オンのときは下の操作を実行します。</p>
+          <div className="editor-top">
+            <div className="preview" style={{ background: toggledFace(button).color ?? undefined }}>
+              <ButtonFace button={toggledFace(button)} />
+            </div>
+            <div className="editor-top-fields">
+              <label className="field">
+                <span>オンのときの名前（空ならオフと同じ）</span>
+                <input value={t.label} onChange={(e) => onChange({ ...t, label: e.target.value })} />
+              </label>
+              <div className="icon-row">
+                <label className="field emoji">
+                  <span>オンのときの絵文字</span>
+                  <input
+                    value={t.icon?.kind === "emoji" ? t.icon.value : ""}
+                    placeholder="🟢"
+                    onChange={(e) => onChange({ ...t, icon: e.target.value ? { kind: "emoji", value: e.target.value } : null })}
+                  />
+                </label>
+              </div>
+              <div className="chips colors">
+                {COLORS.map((c) => (
+                  <button
+                    key={c ?? "none"}
+                    className={`swatch ${t.color === c ? "on" : ""}`}
+                    style={{ background: c ?? "var(--bg-3)" }}
+                    onClick={() => onChange({ ...t, color: c })}
+                    aria-label={c ?? "オフと同じ"}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+          <h3 className="sub-heading">オンのときにタップしたら実行する操作</h3>
+          <ActionEditor action={t.action} onChange={(action) => onChange({ ...t, action })} folders={folders} exclude={HOLD_ACTION_EXCLUDE} onError={onError} />
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, onMove, onDuplicate, onCopy, shortcutError, shortcutUserOf, onClose, onError }: Props) {
   const [b, setB] = useState<DeckButton>(initial);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -85,6 +158,12 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
     const error = validateAction(a);
     if (error) return onError(error);
     let button = b;
+    if (button.toggle && !canToggle(a)) button = { ...button, toggle: undefined };
+    if (button.toggle) {
+      const toggleError = validateAction(button.toggle.action);
+      if (toggleError) return onError(`トグル: ${toggleError}`);
+      button = { ...button, hold: undefined };
+    }
     // 操作の種類を変えて使えなくなった長押しは外す
     if (button.hold && !holdTypesFor(a).includes(button.hold.type)) button = { ...button, hold: undefined };
     if (button.hold?.type === "action") {
@@ -180,7 +259,9 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
           />
         </section>
 
-        <HoldSection button={b} folders={folders} onChange={(hold) => setB((x) => ({ ...x, hold }))} onError={onError} />
+        {canToggle(b.action) && <ToggleSection button={b} folders={folders} onChange={(toggle) => setB((x) => ({ ...x, toggle }))} onError={onError} />}
+
+        {!(b.toggle && canToggle(b.action)) && <HoldSection button={b} folders={folders} onChange={(hold) => setB((x) => ({ ...x, hold }))} onError={onError} />}
 
         <section>
           <h2>キーボードショートカット（任意）</h2>
