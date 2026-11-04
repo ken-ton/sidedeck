@@ -33,6 +33,9 @@ pub fn icon_for(target: &str) -> Option<String> {
         let art = crate::games::find_art(&root, appid.trim_end_matches('/'))?;
         return file_data_url(&art);
     }
+    if target.starts_with("http://") || target.starts_with("https://") {
+        return crate::favicon::fetch(target);
+    }
     if target.contains("://") {
         return None;
     }

@@ -170,10 +170,12 @@ function LaunchFields({
   action,
   onChange,
   onPicked,
+  onUrlEntered,
 }: {
   action: Extract<Action, { type: "launch" }>;
   onChange: (a: Action) => void;
   onPicked: (target: string, label: string, iconSource: string) => void;
+  onUrlEntered?: (url: string) => void;
 }) {
   const [games, setGames] = useState<InstalledGame[] | null>(null);
 
@@ -190,6 +192,7 @@ function LaunchFields({
           value={action.target}
           placeholder="C:\…\app.exe、https://…、steam://rungameid/…"
           onChange={(e) => onChange({ ...action, target: e.target.value })}
+          onBlur={() => /^https?:\/\//i.test(action.target.trim()) && onUrlEntered?.(action.target.trim())}
         />
       </label>
       <div className="chips wrap">
@@ -314,11 +317,13 @@ type Props = {
   /** 「なし」を選べるようにする（表示だけのボタン用） */
   allowNone?: boolean;
   onPicked?: (target: string, label: string, iconSource: string) => void;
+  /** 開くものに URL を入力し終えたとき（ファビコンの自動取得用） */
+  onUrlEntered?: (url: string) => void;
   onSuggestLabel?: (label: string) => void;
   onError: (msg: string) => void;
 };
 
-export default function ActionEditor({ action, onChange, folders, exclude = [], allowNone = false, onPicked, onSuggestLabel, onError }: Props) {
+export default function ActionEditor({ action, onChange, folders, exclude = [], allowNone = false, onPicked, onUrlEntered, onSuggestLabel, onError }: Props) {
   const changeType = (type: ActionType) => {
     if (type === action.type) return;
     onChange(type === "page" ? { type, pageId: folders[0]?.id ?? NEW_FOLDER } : emptyAction(type));
@@ -358,6 +363,7 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
               action={action}
               onChange={onChange}
               onPicked={onPicked ?? ((target) => onChange({ type: "launch", target, args: "" }))}
+              onUrlEntered={onUrlEntered}
             />
           )}
           {action.type === "hotkey" && <HotkeyFields action={action} onChange={onChange} />}

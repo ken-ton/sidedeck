@@ -3,6 +3,7 @@ mod appvolume;
 mod audio;
 mod config;
 mod display;
+mod favicon;
 mod foreground;
 mod games;
 mod icons;
@@ -455,7 +456,8 @@ async fn list_audio_outputs() -> CmdResult<Vec<audio::AudioDevice>> {
 
 #[tauri::command]
 async fn get_icon(target: String) -> Option<String> {
-    icons::icon_for(&target)
+    // URL のときはサイトに取りに行くので、待っている間ほかのコマンドを止めない
+    tauri::async_runtime::spawn_blocking(move || icons::icon_for(&target)).await.ok().flatten()
 }
 
 #[tauri::command]

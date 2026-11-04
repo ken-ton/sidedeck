@@ -285,6 +285,11 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
             allowNone={!!b.info || b.action.type === "none"}
             folders={folders}
             onError={onError}
+            onUrlEntered={(url) => {
+              if (b.icon) return;
+              // 取得を待つ間にアイコンを選んでいたら、そちらを優先する
+              void api.getIcon(url).then((src) => src && setB((x) => (x.icon ? x : { ...x, icon: { kind: "image", src } })), () => {});
+            }}
             onPicked={(target, label, iconSource) => {
               setB((x) => ({ ...x, label: x.label || label, action: { type: "launch", target, args: "" } }));
               fetchIcon(iconSource);
