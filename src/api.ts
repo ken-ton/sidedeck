@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Action, DeckData, MacroStep } from "./deck";
+import type { Action, DeckData, MacroStep, Stats } from "./deck";
 
 export type MonitorInfo = {
   gdiName: string;
@@ -81,6 +81,7 @@ export const api = {
   openPluginsFolder: () => invoke<void>("open_plugins_folder"),
   startKeyRecording: () => invoke<void>("start_key_recording"),
   stopKeyRecording: (keepTiming: boolean) => invoke<MacroStep[]>("stop_key_recording", { keepTiming }),
+  getStats: () => invoke<Stats>("get_stats"),
   getNowPlaying: () => invoke<NowPlaying | null>("get_now_playing"),
   getStates: () => invoke<States>("get_states"),
   listAudioOutputs: () => invoke<AudioDevice[]>("list_audio_outputs"),

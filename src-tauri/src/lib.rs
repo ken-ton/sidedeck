@@ -10,6 +10,7 @@ mod macros;
 mod nowplaying;
 mod plugins;
 mod shortcuts;
+mod stats;
 mod system;
 mod winops;
 
@@ -406,6 +407,11 @@ async fn take_startup_warning(app: AppHandle) -> Option<String> {
 }
 
 #[tauri::command]
+async fn get_stats() -> stats::Stats {
+    tauri::async_runtime::spawn_blocking(stats::get).await.unwrap_or_default()
+}
+
+#[tauri::command]
 async fn get_now_playing() -> Option<nowplaying::NowPlaying> {
     tauri::async_runtime::spawn_blocking(|| nowplaying::get().ok().flatten()).await.ok().flatten()
 }
@@ -664,6 +670,7 @@ pub fn run() {
             stop_key_recording,
             get_states,
             get_now_playing,
+            get_stats,
             list_audio_outputs,
             get_icon,
             list_installed_games,

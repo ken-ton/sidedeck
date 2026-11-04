@@ -256,12 +256,14 @@ type Props = {
   folders: Page[];
   /** 選べないようにする操作の種類 */
   exclude?: ActionType[];
+  /** 「なし」を選べるようにする（表示だけのボタン用） */
+  allowNone?: boolean;
   onPicked?: (target: string, label: string, iconSource: string) => void;
   onSuggestLabel?: (label: string) => void;
   onError: (msg: string) => void;
 };
 
-export default function ActionEditor({ action, onChange, folders, exclude = [], onPicked, onSuggestLabel, onError }: Props) {
+export default function ActionEditor({ action, onChange, folders, exclude = [], allowNone = false, onPicked, onSuggestLabel, onError }: Props) {
   const changeType = (type: ActionType) => {
     if (type === action.type) return;
     onChange(type === "page" ? { type, pageId: folders[0]?.id ?? NEW_FOLDER } : emptyAction(type));
@@ -269,6 +271,13 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
 
   return (
     <>
+      {allowNone && (
+        <div className="chips wrap">
+          <button className={action.type === "none" ? "on" : ""} onClick={() => changeType("none")}>
+            {ACTION_LABELS.none}
+          </button>
+        </div>
+      )}
       {ACTION_GROUPS.map((g) => {
         const types = g.types.filter((t) => !exclude.includes(t));
         if (!types.length) return null;
@@ -286,121 +295,123 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
         );
       })}
 
-      <div className="action-fields">
-        <h3 className="action-fields-title">{ACTION_LABELS[action.type]}の設定</h3>
-        {action.type === "launch" && (
-          <LaunchFields
-            action={action}
-            onChange={onChange}
-            onPicked={onPicked ?? ((target) => onChange({ type: "launch", target, args: "" }))}
-          />
-        )}
-        {action.type === "hotkey" && <HotkeyFields action={action} onChange={onChange} />}
-        {action.type === "text" && (
-          <label className="field">
-            <span>入力する文字</span>
-            <textarea rows={3} value={action.text} onChange={(e) => onChange({ type: "text", text: e.target.value })} />
-          </label>
-        )}
-        {action.type === "media" && (
-          <div className="chips wrap">
-            {(Object.keys(MEDIA_LABELS) as MediaCommand[]).map((c) => (
-              <button key={c} className={action.command === c ? "on" : ""} onClick={() => onChange({ type: "media", command: c })}>
-                {MEDIA_LABELS[c]}
-              </button>
-            ))}
-          </div>
-        )}
-        {action.type === "mic_mute" && <p className="hint">既定のマイクのミュートを切り替えます。ミュート中はボタンが赤くなります。</p>}
-        {action.type === "audio_device" && <AudioDeviceFields action={action} onChange={onChange} />}
-        {action.type === "page" && (
-          <div className="chips wrap">
-            {folders.map((f) => (
-              <button key={f.id} className={action.pageId === f.id ? "on" : ""} onClick={() => onChange({ type: "page", pageId: f.id })}>
-                📁 {f.name}
-              </button>
-            ))}
-            <button className={action.pageId === NEW_FOLDER ? "on" : ""} onClick={() => onChange({ type: "page", pageId: NEW_FOLDER })}>
-              ＋ 新しいフォルダ
-            </button>
-          </div>
-        )}
-        {action.type === "window" && <WindowFields action={action} onChange={onChange} />}
-        {action.type === "plugin" && <PluginFields action={action} onChange={onChange} onSuggestLabel={onSuggestLabel ?? (() => {})} />}
-        {action.type === "macro" && <MacroFields action={action} onChange={onChange} onError={onError} />}
-        {action.type === "system" && (
-          <>
+      {action.type !== "none" && (
+        <div className="action-fields">
+          <h3 className="action-fields-title">{ACTION_LABELS[action.type]}の設定</h3>
+          {action.type === "launch" && (
+            <LaunchFields
+              action={action}
+              onChange={onChange}
+              onPicked={onPicked ?? ((target) => onChange({ type: "launch", target, args: "" }))}
+            />
+          )}
+          {action.type === "hotkey" && <HotkeyFields action={action} onChange={onChange} />}
+          {action.type === "text" && (
+            <label className="field">
+              <span>入力する文字</span>
+              <textarea rows={3} value={action.text} onChange={(e) => onChange({ type: "text", text: e.target.value })} />
+            </label>
+          )}
+          {action.type === "media" && (
             <div className="chips wrap">
-              {(Object.keys(SYSTEM_LABELS) as SystemCommand[]).map((c) => (
-                <button key={c} className={action.command === c ? "on" : ""} onClick={() => onChange({ type: "system", command: c })}>
-                  {SYSTEM_LABELS[c]}
+              {(Object.keys(MEDIA_LABELS) as MediaCommand[]).map((c) => (
+                <button key={c} className={action.command === c ? "on" : ""} onClick={() => onChange({ type: "media", command: c })}>
+                  {MEDIA_LABELS[c]}
                 </button>
               ))}
             </div>
-            {CONFIRM_SYSTEM.includes(action.command) && <p className="hint">誤って押さないよう、3 秒以内にもう一度タップしたときに実行します。</p>}
-          </>
-        )}
-        {action.type === "timer" && (
-          <>
+          )}
+          {action.type === "mic_mute" && <p className="hint">既定のマイクのミュートを切り替えます。ミュート中はボタンが赤くなります。</p>}
+          {action.type === "audio_device" && <AudioDeviceFields action={action} onChange={onChange} />}
+          {action.type === "page" && (
             <div className="chips wrap">
-              <button className={action.mode === "timer" ? "on" : ""} onClick={() => onChange({ ...action, mode: "timer" })}>
-                タイマー
-              </button>
-              <button className={action.mode === "stopwatch" ? "on" : ""} onClick={() => onChange({ ...action, mode: "stopwatch" })}>
-                ストップウォッチ
+              {folders.map((f) => (
+                <button key={f.id} className={action.pageId === f.id ? "on" : ""} onClick={() => onChange({ type: "page", pageId: f.id })}>
+                  📁 {f.name}
+                </button>
+              ))}
+              <button className={action.pageId === NEW_FOLDER ? "on" : ""} onClick={() => onChange({ type: "page", pageId: NEW_FOLDER })}>
+                ＋ 新しいフォルダ
               </button>
             </div>
-            {action.mode === "timer" ? (
-              <>
-                <div className="chips wrap">
-                  {TIMER_PRESETS.map((s) => (
-                    <button key={s} className={action.seconds === s ? "on" : ""} onClick={() => onChange({ ...action, seconds: s })}>
-                      {s < 60 ? `${s} 秒` : `${s / 60} 分`}
-                    </button>
-                  ))}
-                </div>
-                <div className="icon-row">
-                  <label className="field">
-                    <span>分</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={Math.floor(action.seconds / 60)}
-                      onChange={(e) => onChange({ ...action, seconds: Math.max(0, Number(e.target.value) || 0) * 60 + (action.seconds % 60) })}
-                    />
+          )}
+          {action.type === "window" && <WindowFields action={action} onChange={onChange} />}
+          {action.type === "plugin" && <PluginFields action={action} onChange={onChange} onSuggestLabel={onSuggestLabel ?? (() => {})} />}
+          {action.type === "macro" && <MacroFields action={action} onChange={onChange} onError={onError} />}
+          {action.type === "system" && (
+            <>
+              <div className="chips wrap">
+                {(Object.keys(SYSTEM_LABELS) as SystemCommand[]).map((c) => (
+                  <button key={c} className={action.command === c ? "on" : ""} onClick={() => onChange({ type: "system", command: c })}>
+                    {SYSTEM_LABELS[c]}
+                  </button>
+                ))}
+              </div>
+              {CONFIRM_SYSTEM.includes(action.command) && <p className="hint">誤って押さないよう、3 秒以内にもう一度タップしたときに実行します。</p>}
+            </>
+          )}
+          {action.type === "timer" && (
+            <>
+              <div className="chips wrap">
+                <button className={action.mode === "timer" ? "on" : ""} onClick={() => onChange({ ...action, mode: "timer" })}>
+                  タイマー
+                </button>
+                <button className={action.mode === "stopwatch" ? "on" : ""} onClick={() => onChange({ ...action, mode: "stopwatch" })}>
+                  ストップウォッチ
+                </button>
+              </div>
+              {action.mode === "timer" ? (
+                <>
+                  <div className="chips wrap">
+                    {TIMER_PRESETS.map((s) => (
+                      <button key={s} className={action.seconds === s ? "on" : ""} onClick={() => onChange({ ...action, seconds: s })}>
+                        {s < 60 ? `${s} 秒` : `${s / 60} 分`}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="icon-row">
+                    <label className="field">
+                      <span>分</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={Math.floor(action.seconds / 60)}
+                        onChange={(e) => onChange({ ...action, seconds: Math.max(0, Number(e.target.value) || 0) * 60 + (action.seconds % 60) })}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>秒</span>
+                      <input
+                        type="number"
+                        min={0}
+                        max={59}
+                        value={action.seconds % 60}
+                        onChange={(e) => onChange({ ...action, seconds: Math.floor(action.seconds / 60) * 60 + Math.min(59, Math.max(0, Number(e.target.value) || 0)) })}
+                      />
+                    </label>
+                  </div>
+                  <label className="switch-row">
+                    <span>時間になったら音を鳴らす</span>
+                    <input type="checkbox" className="switch" checked={action.sound} onChange={(e) => onChange({ ...action, sound: e.target.checked })} />
                   </label>
-                  <label className="field">
-                    <span>秒</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={59}
-                      value={action.seconds % 60}
-                      onChange={(e) => onChange({ ...action, seconds: Math.floor(action.seconds / 60) * 60 + Math.min(59, Math.max(0, Number(e.target.value) || 0)) })}
-                    />
-                  </label>
-                </div>
-                <label className="switch-row">
-                  <span>時間になったら音を鳴らす</span>
-                  <input type="checkbox" className="switch" checked={action.sound} onChange={(e) => onChange({ ...action, sound: e.target.checked })} />
-                </label>
-                <p className="hint">
-                  タップで開始し、動いている間にタップすると止めます。{formatDuration(action.seconds * 1000)} たつとボタンが点滅します。点滅中にタップすると元に戻ります。
-                </p>
-              </>
-            ) : (
-              <p className="hint">タップするたびに、開始 → 一時停止 → リセットの順に切り替わります。</p>
-            )}
-          </>
-        )}
-        {action.type === "sound" && <SoundFields action={action} onChange={onChange} onSuggestLabel={onSuggestLabel} />}
-        {action.type === "now_playing" && (
-          <p className="hint">
-            再生中の曲名・アーティスト・ジャケット画像をボタンに表示し、タップで再生 / 一時停止します。Spotify・ブラウザなど、Windows のメディア操作に対応したアプリの曲を表示します。
-          </p>
-        )}
-        {action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
-      </div>
+                  <p className="hint">
+                    タップで開始し、動いている間にタップすると止めます。{formatDuration(action.seconds * 1000)} たつとボタンが点滅します。点滅中にタップすると元に戻ります。
+                  </p>
+                </>
+              ) : (
+                <p className="hint">タップするたびに、開始 → 一時停止 → リセットの順に切り替わります。</p>
+              )}
+            </>
+          )}
+          {action.type === "sound" && <SoundFields action={action} onChange={onChange} onSuggestLabel={onSuggestLabel} />}
+          {action.type === "now_playing" && (
+            <p className="hint">
+              再生中の曲名・アーティスト・ジャケット画像をボタンに表示し、タップで再生 / 一時停止します。Spotify・ブラウザなど、Windows のメディア操作に対応したアプリの曲を表示します。
+            </p>
+          )}
+          {action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
+        </div>
+      )}
     </>
   );
 }

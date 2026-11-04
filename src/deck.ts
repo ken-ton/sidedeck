@@ -51,7 +51,45 @@ export type DeckButton = {
   toggle?: ToggleState;
   /** グローバルショートカット（例: ["ctrl", "alt", "m"]） */
   shortcut?: string[];
+  /** 時刻や PC の使用率をボタンに表示する */
+  info?: InfoKind;
 };
+
+export type InfoKind = "time" | "time_seconds" | "date" | "cpu" | "memory" | "gpu";
+
+export const INFO_LABELS: Record<InfoKind, string> = {
+  time: "時刻",
+  time_seconds: "時刻（秒まで）",
+  date: "日付",
+  cpu: "CPU 使用率",
+  memory: "メモリ使用率",
+  gpu: "GPU 使用率",
+};
+
+export const STATS_INFO: InfoKind[] = ["cpu", "memory", "gpu"];
+
+export type Stats = { cpu: number | null; memory: number | null; gpu: number | null };
+
+const WEEKDAYS = "日月火水木金土";
+
+export function formatInfo(kind: InfoKind, now: Date, stats: Stats | null): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  const pct = (label: string, v: number | null | undefined) => `${label} ${v == null ? "--" : Math.round(v)}%`;
+  switch (kind) {
+    case "time":
+      return `${now.getHours()}:${pad(now.getMinutes())}`;
+    case "time_seconds":
+      return `${now.getHours()}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+    case "date":
+      return `${now.getMonth() + 1}/${now.getDate()}（${WEEKDAYS[now.getDay()]}）`;
+    case "cpu":
+      return pct("CPU", stats?.cpu);
+    case "memory":
+      return pct("メモリ", stats?.memory);
+    case "gpu":
+      return pct("GPU", stats?.gpu);
+  }
+}
 
 export type Hold =
   | { type: "repeat"; intervalMs: number }

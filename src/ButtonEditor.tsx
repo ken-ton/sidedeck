@@ -18,6 +18,8 @@ import {
   toggledFace,
   ToggleState,
   uid,
+  INFO_LABELS,
+  InfoKind,
 } from "./deck";
 import ActionEditor, { NEW_FOLDER, validateAction } from "./ActionEditor";
 import ButtonFace from "./ButtonFace";
@@ -175,7 +177,7 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
       folder = { id: uid(), name: b.label || "フォルダ", folder: true, buttons: [] };
       button = { ...button, action: { type: "page", pageId: folder.id } };
     }
-    if (!button.label && !button.icon) button = { ...button, label: ACTION_LABELS[a.type] };
+    if (!button.label && !button.icon && !button.info) button = { ...button, label: ACTION_LABELS[a.type] };
     onSave(button, folder);
   };
 
@@ -239,10 +241,26 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
         </div>
 
         <section>
+          <h2>表示（任意）</h2>
+          <div className="chips wrap">
+            <button className={!b.info ? "on" : ""} onClick={() => setB({ ...b, info: undefined })}>
+              なし
+            </button>
+            {(Object.keys(INFO_LABELS) as InfoKind[]).map((k) => (
+              <button key={k} className={b.info === k ? "on" : ""} onClick={() => setB({ ...b, info: k, action: validateAction(b.action) ? { type: "none" } : b.action })}>
+                {INFO_LABELS[k]}
+              </button>
+            ))}
+          </div>
+          {b.info && <p className="hint">名前とアイコンがなければ大きく、あれば名前の下に表示します。操作の「なし」と組み合わせると、表示だけのボタンになります。</p>}
+        </section>
+
+        <section>
           <h2>操作</h2>
           <ActionEditor
             action={b.action}
             onChange={setAction}
+            allowNone={!!b.info || b.action.type === "none"}
             folders={folders}
             onError={onError}
             onPicked={(target, label, iconSource) => {

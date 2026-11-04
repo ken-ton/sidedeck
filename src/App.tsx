@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, AudioDevice, DeckStatus, NowPlaying, PluginButtonState, States, WindowApp } from "./api";
-import { Action, canToggle, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
+import { Action, canToggle, formatInfo, Stats, STATS_INFO, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
@@ -286,6 +286,8 @@ export default function App() {
 
   const refreshStates = useCallback(() => api.getStates().then(setStates).catch(() => {}), []);
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [clock, setClock] = useState(() => new Date());
   const hasNowPlaying = !!deck?.pages.some((p) => p.buttons.some((b) => b.action.type === "now_playing"));
   useEffect(() => {
     if (!hasNowPlaying) return;
@@ -372,6 +374,20 @@ export default function App() {
     const id = stack[stack.length - 1];
     return deck.pages.find((p) => p.id === id) ?? roots[0] ?? null;
   }, [deck, stack, roots]);
+
+  const infos = new Set(page?.buttons.map((b) => b.info).filter(Boolean));
+  const needsClock = infos.size > 0;
+  const needsStats = STATS_INFO.some((k) => infos.has(k));
+  useEffect(() => {
+    if (!needsClock) return;
+    const tick = () => {
+      setClock(new Date());
+      if (needsStats) api.getStats().then(setStats).catch(() => {});
+    };
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [needsClock, needsStats]);
 
   // 押している間にページが切り替わるとボタンが消えて pointerup が届かないので、ここで離す
   useEffect(
@@ -622,9 +638,12 @@ export default function App() {
     setStack([p.id]);
   };
 
+  /** 名前もアイコンもないボタンは、表示する値を名前の位置に大きく出す */
+  const infoAsTitle = (b: DeckButton) => !!b.info && !b.label && !b.icon;
   const subFor = (b: DeckButton) => {
     const a = b.action;
     if (editing && shortcutErrors[b.id]) return "⚠ ショートカット";
+    if (b.info && !infoAsTitle(b)) return formatInfo(b.info, clock, stats);
     const ps = a.type === "plugin" ? pluginStates[b.id] : undefined;
     if (ps?.sub) return ps.sub;
     if (a.type === "mic_mute" && states.micMuted) return "ミュート中";
@@ -641,6 +660,7 @@ export default function App() {
     return null;
   };
   const overrideFor = (b: DeckButton) => {
+    if (b.info && infoAsTitle(b)) return { title: formatInfo(b.info, clock, stats) };
     if (b.action.type === "plugin") return pluginStates[b.id];
     if (b.action.type === "now_playing" && nowPlaying) return { title: nowPlaying.title, icon: nowPlaying.thumbnail };
   };
