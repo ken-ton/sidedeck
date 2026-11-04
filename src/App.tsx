@@ -6,6 +6,7 @@ import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
 import SystemPanel from "./SystemPanel";
+import { onSoundsChange, playSound, stopSounds } from "./sound";
 
 const HOLD_MS = 500;
 const REPEAT_DELAY_MS = 400;
@@ -213,6 +214,8 @@ export default function App() {
     }, 100);
     return () => window.clearInterval(id);
   }, [anyTimerRunning]);
+  const [sounds, setSounds] = useState<Set<string>>(new Set());
+  useEffect(() => onSoundsChange(setSounds), []);
   /** 確認待ちの PC の操作（もう一度タップすると実行） */
   const confirming = useRef<{ id: string; at: number } | null>(null);
   /** オンになっているトグルボタンの id */
@@ -410,6 +413,21 @@ export default function App() {
     if (a.type === "timer") {
       tapTimer(b.id, a);
       return true;
+    }
+    if (a.type === "sound") {
+      if (sounds.has(runId) && a.retap !== "overlap") {
+        stopSounds(runId);
+        if (a.retap === "stop") return true;
+      }
+      try {
+        await playSound(runId, a.path, a.volume);
+        return true;
+      } catch (e) {
+        setFlash({ id: b.id, ok: false });
+        window.setTimeout(() => setFlash(null), 350);
+        showToast(String(e));
+        return false;
+      }
     }
     if (!runsInBackend(a)) return;
     if (a.type === "system" && CONFIRM_SYSTEM.includes(a.command)) {
@@ -620,6 +638,7 @@ export default function App() {
     if (runningMacros.has(b.id)) c.push("running");
     if (a.type === "timer" && timers[b.id]?.startedAt != null) c.push("running");
     if (a.type === "timer" && timers[b.id]?.done) c.push("blink");
+    if (sounds.has(b.id) || sounds.has(`${b.id}:hold`)) c.push("running");
     const ps = a.type === "plugin" ? pluginStates[b.id] : undefined;
     if (ps?.state === "active") c.push("active");
     if (ps?.state === "alert") c.push("alert");

@@ -27,6 +27,7 @@ export type Action =
   | { type: "system"; command: SystemCommand }
   /** seconds はタイマーの長さ（ストップウォッチでは使わない） */
   | { type: "timer"; mode: "timer" | "stopwatch"; seconds: number; sound: boolean }
+  | { type: "sound"; path: string; volume: number; retap: SoundRetap }
   /** repeat が 0 なら停止されるまで繰り返す */
   | { type: "macro"; steps: MacroStep[]; repeat: number }
   /** app は小文字のプロセス名、monitor はモニターのデバイスパス */
@@ -63,7 +64,7 @@ export type HoldType = Hold["type"];
 export type ToggleState = { label: string; icon: Icon; color: string | null; action: Action };
 
 /** それ自体が状態を持つ操作や、画面内で完結する操作はトグルにしない */
-const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer"];
+const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound"];
 
 export const canToggle = (a: Action) => !NO_TOGGLE.includes(a.type);
 
@@ -82,7 +83,7 @@ export const REPEAT_INTERVALS = [50, 100, 200, 500];
 export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin", "timer"];
 
 /** 連打できない種類（繰り返すと開閉や開始・停止を往復してしまう） */
-const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system", "timer"];
+const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system", "timer", "sound"];
 
 export function holdTypesFor(action: Action): HoldType[] {
   const types: HoldType[] = [];
@@ -132,6 +133,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   system_panel: "システムパネル",
   system: "PC の操作",
   timer: "タイマー",
+  sound: "サウンド",
   macro: "マクロ",
   window: "ウィンドウ操作",
   plugin: "プラグイン",
@@ -141,7 +143,7 @@ export const ACTION_GROUPS: { label: string; types: ActionType[] }[] = [
   { label: "開く・移動", types: ["launch", "page", "window"] },
   { label: "キー入力", types: ["hotkey", "text", "macro"] },
   { label: "音声・システム", types: ["media", "mic_mute", "audio_device", "system_panel", "system"] },
-  { label: "ツール", types: ["timer"] },
+  { label: "ツール", types: ["timer", "sound"] },
   { label: "拡張", types: ["plugin"] },
 ];
 
@@ -167,6 +169,16 @@ export const SYSTEM_LABELS: Record<SystemCommand, string> = {
 
 /** 誤タップを防ぐため、もう一度タップしたら実行する */
 export const CONFIRM_SYSTEM: SystemCommand[] = ["sign_out", "restart", "shutdown"];
+
+export type SoundRetap = "stop" | "restart" | "overlap";
+
+export const SOUND_RETAP_LABELS: Record<SoundRetap, string> = {
+  stop: "止める",
+  restart: "最初から再生",
+  overlap: "重ねて再生",
+};
+
+export const SOUND_EXTENSIONS = ["mp3", "wav", "ogg", "m4a", "aac", "flac", "opus", "webm"];
 
 export const TIMER_PRESETS = [30, 60, 180, 300, 600];
 
@@ -216,6 +228,8 @@ export function emptyAction(type: ActionType): Action {
       return { type, command: "lock" };
     case "timer":
       return { type, mode: "timer", seconds: 180, sound: true };
+    case "sound":
+      return { type, path: "", volume: 100, retap: "stop" };
     case "plugin":
       return { type, pluginId: "", actionId: "", settings: {} };
     default:
@@ -223,7 +237,7 @@ export function emptyAction(type: ActionType): Action {
   }
 }
 
-export const runsInBackend = (a: Action) => !["none", "page", "system_panel", "timer"].includes(a.type);
+export const runsInBackend = (a: Action) => !["none", "page", "system_panel", "timer", "sound"].includes(a.type);
 
 const btn = (slot: number, label: string, emoji: string, action: Action, color: string | null = null): DeckButton => ({
   id: uid(),

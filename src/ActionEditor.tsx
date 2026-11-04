@@ -15,10 +15,14 @@ import {
   MODIFIERS,
   Page,
   formatDuration,
+  SOUND_EXTENSIONS,
+  SOUND_RETAP_LABELS,
+  SoundRetap,
   SYSTEM_LABELS,
   SystemCommand,
   TIMER_PRESETS,
 } from "./deck";
+import { playSound, stopSounds } from "./sound";
 import MacroFields from "./MacroFields";
 import WindowFields from "./WindowFields";
 import PluginFields from "./PluginFields";
@@ -41,10 +45,70 @@ export function validateAction(a: Action): string | null {
   if (a.type === "window" && a.command === "focus" && !a.app) return "前面に出すアプリを指定してください";
   if (a.type === "window" && a.command === "move_to" && !a.monitor) return "移動先のモニターを選んでください";
   if (a.type === "timer" && a.mode === "timer" && a.seconds <= 0) return "タイマーの長さを指定してください";
+  if (a.type === "sound" && !a.path.trim()) return "音声ファイルを選んでください";
   if (a.type === "macro" && a.steps.length === 0) return "ステップを 1 つ以上追加してください";
   if (a.type === "macro" && a.steps.some((s) => (s.type === "keys" || s.type === "key_down" || s.type === "key_up") && s.keys.length === 0))
     return "キーが未設定のステップがあります";
   return null;
+}
+
+const PREVIEW_ID = "__preview__";
+
+function SoundFields({
+  action,
+  onChange,
+  onSuggestLabel,
+}: {
+  action: Extract<Action, { type: "sound" }>;
+  onChange: (a: Action) => void;
+  onSuggestLabel?: (label: string) => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => () => stopSounds(PREVIEW_ID), []);
+  const pick = async () => {
+    const p = await open({ multiple: false, filters: [{ name: "音声", extensions: SOUND_EXTENSIONS }] });
+    if (typeof p !== "string") return;
+    onChange({ ...action, path: p });
+    onSuggestLabel?.(baseName(p).replace(/\.[^.]+$/, ""));
+  };
+  const preview = async () => {
+    setError(null);
+    stopSounds(PREVIEW_ID);
+    try {
+      await playSound(PREVIEW_ID, action.path, action.volume);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+  return (
+    <>
+      <label className="field">
+        <span>音声ファイル</span>
+        <input value={action.path} placeholder="C:\…\sound.mp3" onChange={(e) => onChange({ ...action, path: e.target.value })} />
+      </label>
+      <div className="chips wrap">
+        <button onClick={pick}>ファイルを選ぶ</button>
+        <button disabled={!action.path} onClick={preview}>
+          試聴
+        </button>
+        <button onClick={() => stopSounds(PREVIEW_ID)}>停止</button>
+      </div>
+      {error && <p className="hint">{error}</p>}
+      <label className="field">
+        <span>音量 {action.volume}%</span>
+        <input type="range" min={0} max={100} value={action.volume} onChange={(e) => onChange({ ...action, volume: Number(e.target.value) })} />
+      </label>
+      <h3 className="sub-heading">再生中にタップしたとき</h3>
+      <div className="chips wrap">
+        {(Object.keys(SOUND_RETAP_LABELS) as SoundRetap[]).map((r) => (
+          <button key={r} className={action.retap === r ? "on" : ""} onClick={() => onChange({ ...action, retap: r })}>
+            {SOUND_RETAP_LABELS[r]}
+          </button>
+        ))}
+      </div>
+      <p className="hint">既定の出力デバイスで再生します。対応する形式は {SOUND_EXTENSIONS.join(" / ")} です。</p>
+    </>
+  );
 }
 
 function LaunchFields({
@@ -329,6 +393,7 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
             )}
           </>
         )}
+        {action.type === "sound" && <SoundFields action={action} onChange={onChange} onSuggestLabel={onSuggestLabel} />}
         {action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
       </div>
     </>

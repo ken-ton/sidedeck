@@ -304,6 +304,18 @@ async fn release_keys(keys: Vec<String>) -> CmdResult<()> {
     input::key_up(&keys)
 }
 
+/// 再生する音声ファイルを読む。ファイルはユーザーが選んだもので、巨大なものだけ断る
+#[tauri::command]
+async fn read_sound(path: String) -> CmdResult<tauri::ipc::Response> {
+    const MAX: u64 = 50 * 1024 * 1024;
+    let meta = std::fs::metadata(&path).map_err(|e| format!("音声ファイルを開けません: {e}"))?;
+    if meta.len() > MAX {
+        return Err("音声ファイルが大きすぎます（50 MB まで）".into());
+    }
+    let bytes = std::fs::read(&path).map_err(|e| format!("音声ファイルを開けません: {e}"))?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 #[tauri::command]
 async fn start_key_recording() -> CmdResult<()> {
     macros::start_recording()
@@ -630,6 +642,7 @@ pub fn run() {
             run_action,
             press_keys,
             release_keys,
+            read_sound,
             set_shortcuts,
             take_startup_warning,
             suspend_shortcuts,
