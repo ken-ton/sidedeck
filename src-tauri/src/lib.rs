@@ -22,7 +22,7 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::menu::{Menu, MenuItem};
-use tauri::tray::TrayIconBuilder;
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Emitter, LogicalSize, Manager, PhysicalPosition, PhysicalSize, WindowEvent};
 
 use config::Config;
@@ -570,6 +570,15 @@ async fn set_power_plan(id: String) -> CmdResult<()> {
     system::set_power_plan(&id)
 }
 
+// タスクバーに出さないので、最小化されたままだと戻す手段がない
+fn show_main(app: &AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.unminimize();
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
     let enter = MenuItem::with_id(app, "enter", "Deck モード開始", true, None::<&str>)?;
     let exit = MenuItem::with_id(app, "exit", "Deck モード終了", true, None::<&str>)?;
@@ -580,6 +589,12 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
         .icon(app.default_window_icon().unwrap().clone())
         .tooltip(format!("SideDeck {}", app.package_info().version))
         .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_tray_icon_event(|tray, ev| {
+            if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = ev {
+                show_main(tray.app_handle());
+            }
+        })
         .on_menu_event(|app, ev| match ev.id().as_ref() {
             "enter" => {
                 if let Err(e) = enter_deck(app) {
@@ -590,12 +605,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
             "exit" => {
                 let _ = exit_deck(app);
             }
-            "open" => {
-                if let Some(w) = app.get_webview_window("main") {
-                    let _ = w.show();
-                    let _ = w.set_focus();
-                }
-            }
+            "open" => show_main(app),
             "quit" => {
                 restore_gamma(app);
                 app.exit(0);
@@ -609,12 +619,7 @@ fn build_tray(app: &tauri::App) -> tauri::Result<()> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
-        }))
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show_main(app)))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(shortcuts::plugin())

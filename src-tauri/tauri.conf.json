@@ -19,7 +19,8 @@
         "minWidth": 640,
         "minHeight": 480,
         "center": true,
-        "visible": false
+        "visible": false,
+        "skipTaskbar": true
       }
     ],
     "security": {
