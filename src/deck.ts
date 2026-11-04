@@ -122,7 +122,7 @@ export const STATS_INFO: InfoKind[] = ["cpu", "memory", "gpu"];
 
 export type Stats = { cpu: number | null; memory: number | null; gpu: number | null };
 
-const WEEKDAYS = "日月火水木金土";
+export const WEEKDAYS = "日月火水木金土";
 
 export function formatInfo(kind: InfoKind, now: Date, stats: Stats | null): string {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -203,11 +203,77 @@ export type DeckData = {
   autoSwitch?: boolean;
   /** 絵文字のアイコンを白黒で表示する */
   monoEmoji?: boolean;
+  automations?: Automation[];
   /** OBS 連携（obs-websocket）。パスワードは config.json に平文で保存する */
   obs?: { enabled: boolean; url: string; password: string };
   /** デッキを前面に出す／下げるショートカット。未設定なら DEFAULT_TOGGLE_SHORTCUT、空配列なら無効 */
   toggleShortcut?: string[];
 };
+
+export type ObsEvent = "record_start" | "record_stop" | "stream_start" | "stream_stop";
+
+export type Trigger =
+  | { type: "app_focus"; app: string }
+  | { type: "app_blur"; app: string }
+  /** time は "HH:MM"、days は 0（日）〜 6（土）。空なら毎日 */
+  | { type: "time"; time: string; days: number[] }
+  | { type: "startup" }
+  | { type: "deck_enter" }
+  | { type: "deck_exit" }
+  | { type: "obs"; event: ObsEvent };
+
+export type TriggerType = Trigger["type"];
+
+export type Automation = { id: string; name: string; enabled: boolean; trigger: Trigger; action: Action };
+
+export const TRIGGER_LABELS: Record<TriggerType, string> = {
+  app_focus: "アプリが前面に来たとき",
+  app_blur: "アプリから離れたとき",
+  time: "決まった時刻",
+  startup: "SideDeck の起動時",
+  deck_enter: "Deck モードの開始時",
+  deck_exit: "Deck モードの終了時",
+  obs: "OBS の録画・配信",
+};
+
+export const OBS_EVENT_LABELS: Record<ObsEvent, string> = {
+  record_start: "録画を開始したとき",
+  record_stop: "録画を停止したとき",
+  stream_start: "配信を開始したとき",
+  stream_stop: "配信を終了したとき",
+};
+
+/** ボタンがないと意味をなさない操作は、自動化では選べない */
+export const AUTOMATION_EXCLUDE: ActionType[] = ["page", "system_panel", "timer"];
+
+export function emptyTrigger(type: TriggerType): Trigger {
+  switch (type) {
+    case "app_focus":
+    case "app_blur":
+      return { type, app: "" };
+    case "time":
+      return { type, time: "09:00", days: [] };
+    case "obs":
+      return { type, event: "record_start" };
+    default:
+      return { type };
+  }
+}
+
+export function describeTrigger(t: Trigger): string {
+  switch (t.type) {
+    case "app_focus":
+      return `${t.app} が前面に来たとき`;
+    case "app_blur":
+      return `${t.app} から離れたとき`;
+    case "time":
+      return `${t.days.length ? t.days.map((d) => WEEKDAYS[d]).join("・") : "毎日"} ${t.time}`;
+    case "obs":
+      return `OBS で${OBS_EVENT_LABELS[t.event]}`;
+    default:
+      return TRIGGER_LABELS[t.type];
+  }
+}
 
 export const DEFAULT_TOGGLE_SHORTCUT = ["ctrl", "alt", "d"];
 export const TOGGLE_SHORTCUT_ID = "__toggle__";

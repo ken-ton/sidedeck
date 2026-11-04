@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, AudioDevice, DeckStatus, NowPlaying, PluginButtonState, States, WindowApp } from "./api";
-import { Action, canToggle, formatInfo, Stats, STATS_INFO, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
+import { Action, Automation, canToggle, formatInfo, Stats, STATS_INFO, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
@@ -187,6 +187,7 @@ export default function App() {
   const [shortcutErrors, setShortcutErrors] = useState<Record<string, string>>({});
   /** ショートカットのイベントから、最新の deck で実行するため */
   const runShortcut = useRef<(id: string) => void>(() => {});
+  const runAutomation = useRef<(a: Automation) => void>(() => {});
   /** プラグインが setState で送ってきた見た目（ボタンの id → 状態） */
   const [pluginStates, setPluginStates] = useState<Record<string, PluginButtonState>>({});
   /** 長押しを設定したボタンを押している間の状態 */
@@ -387,6 +388,59 @@ export default function App() {
   useEffect(() => {
     if (obsState.status === "connected") void obs.watchMute(JSON.parse(obsInputs));
   }, [obsState.status, obsInputs]);
+
+  // 自動化。イベントのたびに最新の deck の一覧から探す
+  const automations = useRef<Automation[]>([]);
+  automations.current = (deck?.automations ?? []).filter((a) => a.enabled);
+  const fire = useCallback((match: (a: Automation) => boolean) => automations.current.filter(match).forEach((a) => runAutomation.current(a)), []);
+  const started = useRef(false);
+  useEffect(() => {
+    if (!deck || started.current) return;
+    started.current = true;
+    fire((a) => a.trigger.type === "startup");
+  }, [deck, fire]);
+  const prevForeground = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevForeground.current;
+    const next = foreground?.name ?? null;
+    prevForeground.current = next;
+    if (prev === next) return;
+    fire((a) => (a.trigger.type === "app_blur" && a.trigger.app === prev) || (a.trigger.type === "app_focus" && a.trigger.app === next));
+  }, [foreground, fire]);
+  const prevActive = useRef<boolean | null>(null);
+  useEffect(() => {
+    const prev = prevActive.current;
+    prevActive.current = status.active;
+    if (prev === null || prev === status.active) return;
+    fire((a) => a.trigger.type === (status.active ? "deck_enter" : "deck_exit"));
+  }, [status.active, fire]);
+  /** 接続した直後の状態の取得では発火させない */
+  const prevObs = useRef<ObsState | null>(null);
+  useEffect(() => {
+    const prev = prevObs.current;
+    prevObs.current = obsState.status === "connected" ? obsState : null;
+    if (!prev || obsState.status !== "connected") return;
+    const events: string[] = [];
+    if (prev.recording !== obsState.recording) events.push(obsState.recording ? "record_start" : "record_stop");
+    if (prev.streaming !== obsState.streaming) events.push(obsState.streaming ? "stream_start" : "stream_stop");
+    if (events.length) fire((a) => a.trigger.type === "obs" && events.includes(a.trigger.event));
+  }, [obsState, fire]);
+  const hasTimeTrigger = !!deck?.automations?.some((a) => a.enabled && a.trigger.type === "time");
+  useEffect(() => {
+    if (!hasTimeTrigger) return;
+    const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    // 起動した分や設定した分にはすぐ実行せず、次に時刻が変わったときから見る
+    let last = hhmm(new Date());
+    const check = () => {
+      const d = new Date();
+      const hm = hhmm(d);
+      if (hm === last) return;
+      last = hm;
+      fire((a) => a.trigger.type === "time" && a.trigger.time === hm && (a.trigger.days.length === 0 || a.trigger.days.includes(d.getDay())));
+    };
+    const t = setInterval(check, 5000);
+    return () => clearInterval(t);
+  }, [hasTimeTrigger, fire]);
 
   const infos = new Set(page?.buttons.map((b) => b.info).filter(Boolean));
   const needsClock = infos.size > 0;
@@ -590,6 +644,9 @@ export default function App() {
       return next;
     });
   };
+
+  runAutomation.current = (a: Automation) =>
+    void run({ id: `auto:${a.id}`, slot: -1, label: a.name, icon: null, color: null, action: a.action }, a.action, `auto:${a.id}`);
 
   runShortcut.current = (id: string) => {
     for (const p of deck.pages) {

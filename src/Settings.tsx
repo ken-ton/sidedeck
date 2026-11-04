@@ -6,6 +6,7 @@ import { api, Config, DeckStatus, MonitorInfo, PluginInfo } from "./api";
 import { DEFAULT_TOGGLE_SHORTCUT, misplacedButtons, type DeckData } from "./deck";
 import ShortcutField from "./ShortcutField";
 import ObsSection from "./ObsSection";
+import AutomationsSection from "./AutomationsSection";
 
 type Props = {
   deck: DeckData;
@@ -202,6 +203,8 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
             タッチ画面のセットアップを開く
           </button>
         </section>
+
+        <AutomationsSection deck={deck} onDeckChange={onDeckChange} onError={onError} />
 
         <ObsSection deck={deck} onDeckChange={onDeckChange} />
 
