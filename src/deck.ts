@@ -549,6 +549,68 @@ export function cloneButton(b: DeckButton, pages: Page[], slot: number): { butto
   return { button: { ...cloneOne(b), slot }, pages: added };
 }
 
+export type PageFile = { format: "sidedeck-page"; version: 1; columns: number; rows: number; page: Page; folders: Page[] };
+
+/** ページと、そこから開くフォルダ（入れ子も含む）を 1 つのファイルにまとめる */
+export function exportPage(deck: DeckData, page: Page): PageFile {
+  const folders: Page[] = [];
+  const walk = (p: Page) => {
+    for (const b of p.buttons) {
+      if (b.action.type !== "page") continue;
+      const id = b.action.pageId;
+      const f = deck.pages.find((x) => x.id === id && x.folder);
+      if (f && f.id !== page.id && !folders.some((x) => x.id === id)) {
+        folders.push(f);
+        walk(f);
+      }
+    }
+  };
+  walk(page);
+  const { apps: _, ...rest } = page;
+  return { format: "sidedeck-page", version: 1, columns: deck.columns, rows: deck.rows, page: { ...rest, folder: false }, folders };
+}
+
+export function parsePageFile(text: string): PageFile {
+  let f: PageFile;
+  try {
+    f = JSON.parse(text);
+  } catch {
+    throw new Error("ファイルを読み込めません（JSON ではありません）");
+  }
+  if (f?.format !== "sidedeck-page" || !f.page || !Array.isArray(f.page.buttons) || !Array.isArray(f.folders)) throw new Error("SideDeck のページのファイルではありません");
+  if (f.version !== 1) throw new Error("新しいバージョンの SideDeck で作られたファイルです");
+  return f;
+}
+
+/**
+ * 読み込んだページを新しい id で作り直す。列数・行数が違うときは同じ行・列に置き、
+ * 入らないボタンは空いている場所へ、それでも入らなければ捨てる
+ */
+export function importPage(deck: DeckData, f: PageFile): { pages: Page[]; dropped: number } {
+  const sources = [f.page, ...f.folders.map((p) => ({ ...p, folder: true }))];
+  const added: Page[] = [];
+  let dropped = 0;
+  const relayout = (p: Page): Page => {
+    const out: Page = { ...p, buttons: [] };
+    for (const b of p.buttons) {
+      const col = b.slot % f.columns;
+      const row = Math.floor(b.slot / f.columns);
+      const same = col < deck.columns ? row * deck.columns + col : -1;
+      const slot = same >= 0 && fits(out, deck.columns, deck.rows, same, b.size) ? same : firstEmptySlot(out, deck.columns, deck.rows, 0, b.size);
+      if (slot === null) dropped++;
+      else out.buttons.push({ ...b, slot });
+    }
+    return out;
+  };
+  const buttons = f.page.buttons.map((b) => {
+    const { button, pages } = cloneButton(b, sources, b.slot);
+    added.push(...pages);
+    return button;
+  });
+  const page = relayout({ ...f.page, id: uid(), folder: false, buttons });
+  return { pages: [page, ...added.map(relayout)], dropped };
+}
+
 /** `from` 以降で最初の空き。なければ先頭から探す */
 export function firstEmptySlot(page: Page, columns: number, rows: number, from = 0, size?: ButtonSize): number | null {
   const slots = columns * rows;

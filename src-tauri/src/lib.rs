@@ -407,6 +407,22 @@ async fn take_startup_warning(app: AppHandle) -> Option<String> {
     app.state::<AppState>().startup_warning.lock().unwrap().take()
 }
 
+/// ページのエクスポート・インポート用。パスはユーザーがダイアログで選んだもの
+#[tauri::command]
+async fn write_text_file(path: String, contents: String) -> CmdResult<()> {
+    std::fs::write(&path, contents).map_err(|e| format!("保存できません: {e}"))
+}
+
+#[tauri::command]
+async fn read_text_file(path: String) -> CmdResult<String> {
+    const MAX: u64 = 50 * 1024 * 1024;
+    let len = std::fs::metadata(&path).map_err(|e| format!("開けません: {e}"))?.len();
+    if len > MAX {
+        return Err("ファイルが大きすぎます".into());
+    }
+    std::fs::read_to_string(&path).map_err(|e| format!("開けません: {e}"))
+}
+
 #[tauri::command]
 async fn list_app_volumes() -> CmdResult<Vec<appvolume::AppVolume>> {
     appvolume::list()
@@ -683,6 +699,8 @@ pub fn run() {
             get_now_playing,
             get_stats,
             list_app_volumes,
+            write_text_file,
+            read_text_file,
             set_app_volume,
             list_audio_outputs,
             get_icon,

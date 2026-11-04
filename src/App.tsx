@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { open as openFile, save as saveFile } from "@tauri-apps/plugin-dialog";
 import { api, AudioDevice, DeckStatus, NowPlaying, PluginButtonState, States, WindowApp } from "./api";
-import { Action, Automation, canToggle, formatInfo, Stats, STATS_INFO, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
+import { Action, Automation, canToggle, exportPage, importPage, parsePageFile, formatInfo, Stats, STATS_INFO, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
@@ -121,12 +122,15 @@ function AppsField({ apps, onChange, lastApp }: { apps: string[]; onChange: (app
   );
 }
 
-function PageEditor({ page, canDelete, lastApp, onSave, onDelete, onClose }: {
+const PAGE_FILTER = [{ name: "SideDeck のページ", extensions: ["json"] }];
+
+function PageEditor({ page, canDelete, lastApp, onSave, onDelete, onExport, onClose }: {
   page: Page;
   canDelete: boolean;
   lastApp: WindowApp | null;
   onSave: (name: string, apps: string[]) => void;
   onDelete: () => void;
+  onExport: () => void;
   onClose: () => void;
 }) {
   const [name, setName] = useState(page.name);
@@ -152,6 +156,7 @@ function PageEditor({ page, canDelete, lastApp, onSave, onDelete, onClose }: {
               {confirm ? "中のボタンごと削除" : "削除"}
             </button>
           )}
+          <button onClick={onExport}>ファイルに書き出す</button>
           <span className="spacer" />
           <button className="ghost" onClick={onClose}>
             キャンセル
@@ -764,6 +769,30 @@ export default function App() {
     setStack([p.id]);
   };
 
+  const exportToFile = async (p: Page) => {
+    try {
+      const path = await saveFile({ defaultPath: `${p.name.replace(/[\\/:*?"<>|]/g, "_")}.sidedeck.json`, filters: PAGE_FILTER });
+      if (!path) return;
+      await api.writeTextFile(path, JSON.stringify(exportPage(deck, p), null, 2));
+      showToast("ファイルに書き出しました");
+    } catch (e) {
+      showToast(String(e));
+    }
+  };
+
+  const importFromFile = async () => {
+    try {
+      const path = await openFile({ multiple: false, filters: PAGE_FILTER });
+      if (typeof path !== "string") return;
+      const { pages, dropped } = importPage(deck, parsePageFile(await api.readTextFile(path)));
+      commit({ ...deck, pages: [...deck.pages, ...pages] });
+      setStack([pages[0].id]);
+      showToast(dropped ? `読み込みました。ボタンの数が合わないため、${dropped} 個のボタンは入りませんでした` : "読み込みました");
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   const tapTab = (p: Page) => {
     if (editing && p.id === page.id) return setPageEdit(p);
     setStack([p.id]);
@@ -849,9 +878,14 @@ export default function App() {
               </button>
             ))}
             {editing && (
-              <button className="ghost" onClick={addPage}>
-                ＋ ページ
-              </button>
+              <>
+                <button className="ghost" onClick={addPage}>
+                  ＋ ページ
+                </button>
+                <button className="ghost" onClick={importFromFile}>
+                  ファイルから読み込む
+                </button>
+              </>
             )}
           </nav>
         )}
@@ -940,6 +974,7 @@ export default function App() {
           page={pageEdit}
           canDelete={pageEdit.folder || roots.length > 1}
           lastApp={foreground}
+          onExport={() => exportToFile(pageEdit)}
           onClose={() => setPageEdit(null)}
           onSave={(name, apps) => {
             const id = pageEdit.id;

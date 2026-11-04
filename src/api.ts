@@ -93,6 +93,8 @@ export const api = {
 
   getVolume: () => invoke<Volume>("get_volume"),
   setVolume: (level: number) => invoke<void>("set_volume", { level }),
+  writeTextFile: (path: string, contents: string) => invoke<void>("write_text_file", { path, contents }),
+  readTextFile: (path: string) => invoke<string>("read_text_file", { path }),
   listAppVolumes: () => invoke<AppVolume[]>("list_app_volumes"),
   setAppVolume: (key: string, level: number | null, muted: boolean | null) => invoke<void>("set_app_volume", { key, level, muted }),
   setMute: (muted: boolean) => invoke<void>("set_mute", { muted }),
