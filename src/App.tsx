@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { open as openFile, save as saveFile } from "@tauri-apps/plugin-dialog";
 import { api, AudioDevice, DeckStatus, NowPlaying, PluginButtonState, States, WindowApp } from "./api";
-import { Action, Automation, canToggle, exportPage, importPage, parsePageFile, formatInfo, Stats, STATS_INFO, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
+import { Action, Automation, canToggle, exportPage, importPage, parsePageFile, formatInfo, Stats, STATS_INFO, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, cellsOf, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import Settings from "./Settings";
@@ -197,6 +197,12 @@ export default function App() {
   const [pluginStates, setPluginStates] = useState<Record<string, PluginButtonState>>({});
   /** 長押しを設定したボタンを押している間の状態 */
   const press = useRef<Press | null>(null);
+  /** 編集中のドラッグ。grab はつかんだマスのボタン左上からのずれ */
+  const drag = useRef<{ id: string; pointerId: number; x: number; y: number; grab: { col: number; row: number }; active: boolean } | null>(null);
+  const [dragView, setDragView] = useState<{ id: string; dx: number; dy: number; target: number | null } | null>(null);
+  /** ドラッグを終えた直後の click で編集画面を開かないため */
+  const draggedAt = useRef(0);
+  const gridRef = useRef<HTMLElement | null>(null);
   const [pressed, setPressed] = useState<string | null>(null);
   const [timers, setTimers] = useState<Record<string, TimerState>>({});
   const timersRef = useRef(timers);
@@ -662,8 +668,13 @@ export default function App() {
 
   /** 空いていればそこへ移動し、ボタンがあれば入れ替える。大きいボタンが収まらないときは動かさない */
   const moveTo = (slot: number) => {
-    const src = page.buttons.find((b) => b.id === moving);
+    const id = moving;
     setMoving(null);
+    if (id) moveButton(id, slot);
+  };
+
+  const moveButton = (id: string, slot: number) => {
+    const src = page.buttons.find((b) => b.id === id);
     if (!src) return;
     const target = occupancy(page.buttons, deck.columns, deck.rows, src.id).get(slot);
     const to = target ? target.slot : slot;
@@ -696,7 +707,57 @@ export default function App() {
     setEditor(null);
   };
 
+  const cellAt = (x: number, y: number) => {
+    const el = gridRef.current;
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    const pad = parseFloat(cs.paddingLeft) || 0;
+    const gap = parseFloat(cs.columnGap) || 0;
+    const w = (rect.width - pad * 2 - gap * (deck.columns - 1)) / deck.columns;
+    const h = (rect.height - pad * 2 - gap * (deck.rows - 1)) / deck.rows;
+    const col = Math.floor((x - rect.left - pad + gap / 2) / (w + gap));
+    const row = Math.floor((y - rect.top - pad + gap / 2) / (h + gap));
+    return { col: Math.min(deck.columns - 1, Math.max(0, col)), row: Math.min(deck.rows - 1, Math.max(0, row)) };
+  };
+
+  const dragMove = (e: React.PointerEvent<HTMLButtonElement>, b: DeckButton) => {
+    const d = drag.current;
+    if (!d || d.pointerId !== e.pointerId) return;
+    const dx = e.clientX - d.x;
+    const dy = e.clientY - d.y;
+    if (!d.active && Math.hypot(dx, dy) < 10) return;
+    d.active = true;
+    const cell = cellAt(e.clientX, e.clientY);
+    let target: number | null = null;
+    if (cell) {
+      const col = cell.col - d.grab.col;
+      const row = cell.row - d.grab.row;
+      if (col >= 0 && row >= 0 && cellsOf(row * deck.columns + col, b.size, deck.columns, deck.rows)) target = row * deck.columns + col;
+    }
+    setDragView({ id: b.id, dx, dy, target });
+  };
+
+  /** ドロップしたら移動する。動かさずに離したときは click に任せる */
+  const dragEnd = (b: DeckButton, cancelled: boolean) => {
+    const d = drag.current;
+    if (!d || d.id !== b.id) return;
+    drag.current = null;
+    const target = dragView?.id === b.id ? dragView.target : null;
+    setDragView(null);
+    if (!d.active) return;
+    draggedAt.current = Date.now();
+    if (!cancelled && target !== null && target !== b.slot) moveButton(b.id, target);
+  };
+
   const pressStart = (e: React.PointerEvent<HTMLButtonElement>, b: DeckButton) => {
+    if (editing && !moving && !drag.current) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const cell = cellAt(e.clientX, e.clientY);
+      const grab = cell ? { col: Math.max(0, cell.col - (b.slot % deck.columns)), row: Math.max(0, cell.row - Math.floor(b.slot / deck.columns)) } : { col: 0, row: 0 };
+      drag.current = { id: b.id, pointerId: e.pointerId, x: e.clientX, y: e.clientY, grab, active: false };
+      return;
+    }
     const hold = b.hold;
     if (editing || !hold || press.current) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -724,6 +785,7 @@ export default function App() {
 
   /** `cancelled` なら、まだ何も実行していなくてもタップとして扱わない */
   const pressEnd = (b: DeckButton, cancelled: boolean) => {
+    dragEnd(b, cancelled);
     const p = press.current;
     if (!p || p.id !== b.id) return;
     press.current = null;
@@ -735,6 +797,7 @@ export default function App() {
   const tapSlot = (slot: number, b?: DeckButton) => {
     // 長押しを設定したボタンは pointer イベントで処理する
     if (!editing) return b && !b.hold && tap(b);
+    if (Date.now() - draggedAt.current < 500) return;
     if (moving) return moveTo(slot);
     if (!b && clipboard) return placeClone(clipboard.button, clipboard.pages, slot);
     setEditor(
@@ -851,6 +914,8 @@ export default function App() {
   const slots = deck.columns * deck.rows;
   const bySlot = new Map(page.buttons.map((b) => [b.slot, b]));
   const covered = occupancy(page.buttons, deck.columns, deck.rows);
+  const dragging = dragView && page.buttons.find((b) => b.id === dragView.id);
+  const dropCells = new Set(dragging && dragView.target !== null ? (cellsOf(dragView.target, dragging.size, deck.columns, deck.rows) ?? []) : []);
   const place = (slot: number, size?: DeckButton["size"]) => {
     const { w, h } = sizeOf(size);
     return { gridColumn: `${(slot % deck.columns) + 1} / span ${w}`, gridRow: `${Math.floor(slot / deck.columns) + 1} / span ${h}` };
@@ -914,18 +979,18 @@ export default function App() {
               </button>
             </>
           ) : (
-            "ボタンをタップして編集、空いている場所をタップして追加。タブをもう一度タップすると名前を変えられます。"
+            "ボタンをタップして編集、ドラッグで移動、空いている場所をタップして追加。タブをもう一度タップすると名前を変えられます。"
           )}
         </div>
       )}
 
-      <main className="grid" style={{ gridTemplateColumns: `repeat(${deck.columns}, 1fr)`, gridTemplateRows: `repeat(${deck.rows}, 1fr)` }}>
+      <main ref={gridRef} className="grid" style={{ gridTemplateColumns: `repeat(${deck.columns}, 1fr)`, gridTemplateRows: `repeat(${deck.rows}, 1fr)` }}>
         {Array.from({ length: slots }, (_, slot) => {
           const b = bySlot.get(slot);
           if (!b && covered.has(slot)) return null;
           if (!b) {
             return (
-              <button key={`empty-${slot}`} className={`key empty ${editing ? "editable" : ""}`} style={place(slot)} onClick={() => tapSlot(slot)} disabled={!editing}>
+              <button key={`empty-${slot}`} className={`key empty ${editing ? "editable" : ""} ${dropCells.has(slot) ? "drop-target" : ""}`} style={place(slot)} onClick={() => tapSlot(slot)} disabled={!editing}>
                 {editing && <span className="plus">{clipboard && !moving ? "📋" : "＋"}</span>}
               </button>
             );
@@ -934,10 +999,15 @@ export default function App() {
           return (
             <button
               key={b.id}
-              className={classFor(b)}
-              style={{ ...place(slot, b.size), ...(face.color ? { background: face.color } : {}) }}
+              className={`${classFor(b)}${dragView?.id === b.id ? " dragging" : ""}${dragView?.id !== b.id && cellsOf(b.slot, b.size, deck.columns, deck.rows)?.some((c) => dropCells.has(c)) ? " drop-target" : ""}`}
+              style={{
+                ...place(slot, b.size),
+                ...(face.color ? { background: face.color } : {}),
+                ...(dragView?.id === b.id ? { transform: `translate(${dragView.dx}px, ${dragView.dy}px)` } : {}),
+              }}
               onClick={() => tapSlot(slot, b)}
               onPointerDown={(e) => pressStart(e, b)}
+              onPointerMove={(e) => dragMove(e, b)}
               onPointerUp={() => pressEnd(b, false)}
               onPointerCancel={() => pressEnd(b, true)}
               onLostPointerCapture={() => pressEnd(b, true)}

@@ -270,6 +270,19 @@ h2 {
   outline: 2px dashed color-mix(in srgb, var(--text) 25%, transparent);
   outline-offset: -4px;
 }
+.is-editing .key:not(.empty) {
+  touch-action: none;
+}
+.key.dragging {
+  z-index: 10;
+  opacity: 0.85;
+  transition: none;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+.key.drop-target {
+  outline: 3px solid var(--accent) !important;
+  outline-offset: -3px;
+}
 .key.moving {
   outline: 3px solid #ffb224 !important;
   animation: wiggle 0.4s ease-in-out infinite alternate;
