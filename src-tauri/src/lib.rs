@@ -1,4 +1,5 @@
 mod actions;
+mod apps;
 mod appvolume;
 mod audio;
 mod config;
@@ -476,6 +477,11 @@ async fn list_installed_games() -> Vec<games::Game> {
 }
 
 #[tauri::command]
+async fn list_start_apps() -> Vec<apps::StartApp> {
+    tauri::async_runtime::spawn_blocking(apps::list).await.unwrap_or_default()
+}
+
+#[tauri::command]
 async fn get_volume() -> CmdResult<system::Volume> {
     system::get_volume()
 }
@@ -712,6 +718,7 @@ pub fn run() {
             list_audio_outputs,
             get_icon,
             list_installed_games,
+            list_start_apps,
             get_foreground_app,
             list_window_apps,
             get_volume,

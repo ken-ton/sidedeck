@@ -92,6 +92,9 @@ pub(crate) fn launch(app: &tauri::AppHandle, target: &str, args: &str) -> Result
     if target.is_empty() {
         return Err("起動するものが設定されていません".into());
     }
+    if target.len() > crate::apps::PREFIX.len() && target[..crate::apps::PREFIX.len()].eq_ignore_ascii_case(crate::apps::PREFIX) {
+        return crate::apps::launch(target);
+    }
     if target.contains("://") {
         return app.opener().open_url(target, None::<&str>).map_err(|e| e.to_string());
     }

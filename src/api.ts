@@ -20,6 +20,7 @@ export type Config = {
 };
 
 export type InstalledGame = { id: string; title: string; source: "steam" | "epic"; launch: string; art: string | null };
+export type StartApp = { name: string; target: string; packaged: boolean };
 export type DeckStatus = { active: boolean; monitorConnected: boolean };
 export type States = { micMuted: boolean | null; defaultOutput: string | null };
 export type AudioDevice = { id: string; name: string; isDefault: boolean };
@@ -88,6 +89,7 @@ export const api = {
   listAudioOutputs: () => invoke<AudioDevice[]>("list_audio_outputs"),
   getIcon: (target: string) => invoke<string | null>("get_icon", { target }),
   listInstalledGames: () => invoke<InstalledGame[]>("list_installed_games"),
+  listStartApps: () => invoke<StartApp[]>("list_start_apps"),
   getForegroundApp: () => invoke<WindowApp | null>("get_foreground_app"),
   listWindowApps: () => invoke<WindowApp[]>("list_window_apps"),
 

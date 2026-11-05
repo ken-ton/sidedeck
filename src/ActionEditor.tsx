@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
-import { api, AudioDevice, InstalledGame } from "./api";
+import { api, AudioDevice, InstalledGame, StartApp } from "./api";
 import {
   Action,
   ACTION_GROUPS,
@@ -178,6 +178,10 @@ function LaunchFields({
   onUrlEntered?: (url: string) => void;
 }) {
   const [games, setGames] = useState<InstalledGame[] | null>(null);
+  const [apps, setApps] = useState<StartApp[] | null>(null);
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const shownApps = apps?.filter((a) => !q || a.name.toLowerCase().includes(q));
 
   const pickFile = async (directory: boolean) => {
     const path = await open({ multiple: false, directory });
@@ -198,8 +202,48 @@ function LaunchFields({
       <div className="chips wrap">
         <button onClick={() => pickFile(false)}>ファイルを選ぶ</button>
         <button onClick={() => pickFile(true)}>フォルダを選ぶ</button>
-        <button onClick={() => api.listInstalledGames().then(setGames)}>Steam / Epic から選ぶ</button>
+        <button
+          onClick={() => {
+            setGames(null);
+            api.listStartApps().then(setApps);
+          }}
+        >
+          アプリ一覧から選ぶ
+        </button>
+        <button
+          onClick={() => {
+            setApps(null);
+            api.listInstalledGames().then(setGames);
+          }}
+        >
+          Steam / Epic から選ぶ
+        </button>
       </div>
+      {shownApps && (
+        <>
+          <label className="field">
+            <span>絞り込み</span>
+            <input value={query} placeholder="アプリ名" onChange={(e) => setQuery(e.target.value)} autoFocus />
+          </label>
+          <ul className="picker">
+            {shownApps.length === 0 && <li className="hint">見つかりません</li>}
+            {shownApps.map((a) => (
+              <li key={a.target}>
+                <button
+                  onClick={() => {
+                    onPicked(a.target, a.name, a.target);
+                    setApps(null);
+                    setQuery("");
+                  }}
+                >
+                  <span>{a.name}</span>
+                  {a.packaged && <small>ストア</small>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
       {games && (
         <ul className="picker">
           {games.length === 0 && <li className="hint">インストール済みのゲームが見つかりません</li>}
