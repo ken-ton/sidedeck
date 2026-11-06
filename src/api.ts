@@ -87,6 +87,8 @@ export const api = {
   startKeyRecording: () => invoke<void>("start_key_recording"),
   stopKeyRecording: (keepTiming: boolean) => invoke<MacroStep[]>("stop_key_recording", { keepTiming }),
   getStats: () => invoke<Stats>("get_stats"),
+  /** x / y / w / h は WebView 内の CSS ピクセル。ここに透明なウィンドウを重ねてタッチを受ける */
+  setTrackpadAreas: (areas: { id: string; speed: number; x: number; y: number; w: number; h: number }[]) => invoke<void>("set_trackpad_areas", { areas }),
   getNowPlaying: () => invoke<NowPlaying | null>("get_now_playing"),
   getStates: () => invoke<States>("get_states"),
   listAudioOutputs: () => invoke<AudioDevice[]>("list_audio_outputs"),

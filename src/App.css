@@ -256,6 +256,16 @@ h2 {
   background: var(--bg-3);
   box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.25);
   overflow: hidden;
+  isolation: isolate;
+}
+/* z-index: -1 で、ボタンの背景より上・中身より下に描く（.key の isolation が前提） */
+.stats-graph {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 /* cq 単位はボタン自身ではなく外側の大きさになるので、間隔は gap ではなく子の margin で取る */
 .key > .face-label:not(:first-child),
@@ -358,13 +368,57 @@ h2 {
 .face-label.only {
   font-size: clamp(14px, 16cqmin, 30px);
 }
+/* 複数の値を 1 行ずつ並べる表示 */
+.face-label.multi {
+  display: grid;
+  grid-template-columns: auto auto;
+  column-gap: 0.6em;
+  white-space: nowrap;
+  font-size: clamp(11px, 12cqmin, 22px);
+  font-variant-numeric: tabular-nums;
+}
+.face-label.multi.only {
+  font-size: clamp(11px, 13cqmin, 24px);
+}
+.multi-row {
+  display: contents;
+}
+.multi-row > :first-child {
+  justify-self: start;
+  opacity: 0.75;
+  font-weight: 500;
+}
+.multi-value {
+  justify-self: end;
+}
+.face-label.multi > .multi-value {
+  grid-column: 1 / -1;
+  justify-self: center;
+}
 .face-sub {
   max-width: 100%;
   font-size: clamp(10px, 8cqmin, 16px);
   opacity: 0.8;
-  white-space: nowrap;
+  white-space: pre;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.key.trackpad {
+  touch-action: none;
+  user-select: none;
+  background: var(--bg-2);
+  box-shadow: inset 0 0 0 2px var(--line);
+  transition: box-shadow 0.15s;
+}
+.key.trackpad > * {
+  opacity: 0.45;
+  pointer-events: none;
+}
+.key.trackpad.touching {
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.key.trackpad.holding {
+  box-shadow: inset 0 0 0 4px var(--accent);
 }
 .key.now-playing img.face-icon {
   object-fit: cover;

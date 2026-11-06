@@ -18,8 +18,10 @@ import {
   toggledFace,
   ToggleState,
   uid,
+  INFO_GROUPS,
+  HISTORY_SECONDS,
+  STATS_INFO,
   INFO_LABELS,
-  InfoKind,
   BUTTON_SIZES,
   ButtonSize,
   SIZE_LABELS,
@@ -264,16 +266,26 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
 
         <section>
           <h2>表示（任意）</h2>
-          <div className="chips wrap">
-            <button className={!b.info ? "on" : ""} onClick={() => setB({ ...b, info: undefined })}>
-              なし
-            </button>
-            {(Object.keys(INFO_LABELS) as InfoKind[]).map((k) => (
-              <button key={k} className={b.info === k ? "on" : ""} onClick={() => setB({ ...b, info: k, action: validateAction(b.action) ? { type: "none" } : b.action })}>
-                {INFO_LABELS[k]}
-              </button>
-            ))}
-          </div>
+          {INFO_GROUPS.map((group, i) => (
+            <div key={i} className="chips wrap">
+              {i === 0 && (
+                <button className={!b.info ? "on" : ""} onClick={() => setB({ ...b, info: undefined })}>
+                  なし
+                </button>
+              )}
+              {group.map((k) => (
+                <button key={k} className={b.info === k ? "on" : ""} onClick={() => setB({ ...b, info: k, action: validateAction(b.action) ? { type: "none" } : b.action })}>
+                  {INFO_LABELS[k]}
+                </button>
+              ))}
+            </div>
+          ))}
+          {b.info && STATS_INFO.includes(b.info) && (
+            <label className="switch-row">
+              <span>直近 {HISTORY_SECONDS} 秒の推移を背景にグラフで表示する</span>
+              <input type="checkbox" className="switch" checked={!!b.graph} onChange={(e) => setB({ ...b, graph: e.target.checked || undefined })} />
+            </label>
+          )}
           {b.info && <p className="hint">名前とアイコンがなければ大きく、あれば名前の下に表示します。操作の「なし」と組み合わせると、表示だけのボタンになります。</p>}
         </section>
 
@@ -306,7 +318,7 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
 
         {canToggle(b.action) && <ToggleSection button={b} folders={folders} onChange={(toggle) => setB((x) => ({ ...x, toggle }))} onError={onError} />}
 
-        {!(b.toggle && canToggle(b.action)) && <HoldSection button={b} folders={folders} onChange={(hold) => setB((x) => ({ ...x, hold }))} onError={onError} />}
+        {!(b.toggle && canToggle(b.action)) && b.action.type !== "trackpad" && <HoldSection button={b} folders={folders} onChange={(hold) => setB((x) => ({ ...x, hold }))} onError={onError} />}
 
         <section>
           <h2>キーボードショートカット（任意）</h2>

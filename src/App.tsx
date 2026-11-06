@@ -3,9 +3,11 @@ import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { open as openFile, save as saveFile } from "@tauri-apps/plugin-dialog";
 import { api, AudioDevice, DeckStatus, NowPlaying, PluginButtonState, States, UpdateInfo, WindowApp } from "./api";
-import { Action, Automation, canToggle, exportPage, importPage, parsePageFile, formatInfo, Stats, STATS_INFO, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, cellsOf, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
+import { Action, Automation, canToggle, exportPage, importPage, parsePageFile, formatInfo, HISTORY_SECONDS, showsGraph, Stats, STATS_INFO, STATS_SERIES,cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, cellsOf, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
+import StatsGraph, { SERIES_COLORS } from "./StatsGraph";
+import Trackpad from "./Trackpad";
 import Settings from "./Settings";
 import SystemPanel from "./SystemPanel";
 import { onSoundsChange, playSound, stopSounds } from "./sound";
@@ -311,6 +313,7 @@ export default function App() {
   const refreshStates = useCallback(() => api.getStates().then(setStates).catch(() => {}), []);
   const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [statsHistory, setStatsHistory] = useState<Stats[]>([]);
   const [clock, setClock] = useState(() => new Date());
   const hasNowPlaying = !!deck?.pages.some((p) => p.buttons.some((b) => b.action.type === "now_playing"));
   useEffect(() => {
@@ -464,12 +467,20 @@ export default function App() {
 
   const infos = new Set(page?.buttons.map((b) => b.info).filter(Boolean));
   const needsClock = infos.size > 0;
-  const needsStats = STATS_INFO.some((k) => infos.has(k));
+  // グラフが途切れないよう、ほかのページにグラフのボタンがあれば表示していなくても取り続ける
+  const needsStats = STATS_INFO.some((k) => infos.has(k)) || !!deck?.pages.some((p) => p.buttons.some(showsGraph));
   useEffect(() => {
-    if (!needsClock) return;
+    if (!needsClock && !needsStats) return;
     const tick = () => {
-      setClock(new Date());
-      if (needsStats) api.getStats().then(setStats).catch(() => {});
+      if (needsClock) setClock(new Date());
+      if (needsStats)
+        api
+          .getStats()
+          .then((s) => {
+            setStats(s);
+            setStatsHistory((h) => [...h.slice(1 - HISTORY_SECONDS), s]);
+          })
+          .catch(() => {});
     };
     tick();
     const t = setInterval(tick, 1000);
@@ -1010,6 +1021,20 @@ export default function App() {
             );
           }
           const face = isOn(b) ? toggledFace(b) : b;
+          if (!editing && b.action.type === "trackpad") {
+            return (
+              <Trackpad
+                key={b.id}
+                id={b.id}
+                className="key"
+                speed={b.action.speed}
+                style={{ ...place(slot, b.size), ...(face.color ? { background: face.color } : {}) }}
+                onError={showToast}
+              >
+                <ButtonFace button={face} />
+              </Trackpad>
+            );
+          }
           return (
             <button
               key={b.id}
@@ -1026,7 +1051,13 @@ export default function App() {
               onPointerCancel={() => pressEnd(b, true)}
               onLostPointerCapture={() => pressEnd(b, true)}
             >
-              <ButtonFace button={face} sub={subFor(b)} override={overrideFor(b)} />
+              <ButtonFace
+                button={face}
+                sub={subFor(b)}
+                override={overrideFor(b)}
+                background={showsGraph(b) && <StatsGraph kind={b.info!} history={statsHistory} />}
+                lineColors={showsGraph(b) && STATS_SERIES[b.info!]!.length > 1 ? STATS_SERIES[b.info!]!.map((k) => SERIES_COLORS[k]) : undefined}
+              />
             </button>
           );
         })}

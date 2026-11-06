@@ -23,6 +23,7 @@ import {
   SYSTEM_LABELS,
   SystemCommand,
   TIMER_PRESETS,
+  TRACKPAD_SPEEDS,
 } from "./deck";
 import { playSound, stopSounds } from "./sound";
 import { obs } from "./obs";
@@ -514,6 +515,20 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
             <p className="hint">
               再生中の曲名・アーティスト・ジャケット画像をボタンに表示し、タップで再生 / 一時停止します。Spotify・ブラウザなど、Windows のメディア操作に対応したアプリの曲を表示します。
             </p>
+          )}
+          {action.type === "trackpad" && (
+            <>
+              <div className="chips">
+                {TRACKPAD_SPEEDS.map(([speed, label]) => (
+                  <button key={speed} className={action.speed === speed ? "on" : ""} onClick={() => onChange({ ...action, speed })}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="hint">
+                1 本指でなぞるとマウスが動き、タップで左クリック、2 本指でなぞるとスクロール、2 本指のタップで右クリック、3 本指のタップで中クリックです。動かさずに長く触れると左ボタンを押したままになり、そのまま動かすとドラッグできます。大きさは 2×2 がおすすめです。
+              </p>
+            </>
           )}
           {action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
         </div>

@@ -16,6 +16,7 @@ mod shortcuts;
 mod stats;
 mod update;
 mod system;
+mod trackpad;
 mod winops;
 
 use std::path::PathBuf;
@@ -320,6 +321,12 @@ async fn read_sound(path: String) -> CmdResult<tauri::ipc::Response> {
     }
     let bytes = std::fs::read(&path).map_err(|e| format!("音声ファイルを開けません: {e}"))?;
     Ok(tauri::ipc::Response::new(bytes))
+}
+
+#[tauri::command]
+async fn set_trackpad_areas(app: AppHandle, window: tauri::WebviewWindow, areas: Vec<trackpad::Area>) -> CmdResult<()> {
+    let hwnd = window.hwnd().map_err(|e| e.to_string())?;
+    trackpad::set_areas(&app, windows::Win32::Foundation::HWND(hwnd.0 as _), areas)
 }
 
 #[tauri::command]
@@ -726,6 +733,7 @@ pub fn run() {
             get_states,
             get_now_playing,
             get_stats,
+            set_trackpad_areas,
             list_app_volumes,
             write_text_file,
             read_text_file,

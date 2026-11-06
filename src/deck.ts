@@ -34,6 +34,8 @@ export type Action =
   | { type: "macro"; steps: MacroStep[]; repeat: number }
   /** app は小文字のプロセス名、monitor はモニターのデバイスパス */
   | { type: "window"; command: WindowCommand; app: string; launch: string; monitor: string }
+  /** speed は指の移動量に掛ける倍率 */
+  | { type: "trackpad"; speed: number }
   | { type: "plugin"; pluginId: string; actionId: string; settings: Record<string, unknown> };
 
 export type ActionType = Action["type"];
@@ -54,6 +56,8 @@ export type DeckButton = {
   shortcut?: string[];
   /** 時刻や PC の使用率をボタンに表示する */
   info?: InfoKind;
+  /** 使用率の表示で、直近の推移を背景にグラフで出す */
+  graph?: boolean;
   /** 未指定は 1×1。slot は左上のマス */
   size?: ButtonSize;
 };
@@ -107,23 +111,48 @@ export function misplacedButtons(page: Page, columns: number, rows: number): num
   return n;
 }
 
-export type InfoKind = "time" | "time_seconds" | "date" | "cpu" | "memory" | "gpu" | "net_down" | "net_up";
+export type InfoKind = "time" | "time_seconds" | "date" | "cpu" | "memory" | "gpu" | "net_down" | "net_up" | "system" | "net";
 
 export const INFO_LABELS: Record<InfoKind, string> = {
   time: "時刻",
   time_seconds: "時刻（秒まで）",
   date: "日付",
+  system: "CPU / メモリ / GPU",
   cpu: "CPU 使用率",
   memory: "メモリ使用率",
   gpu: "GPU 使用率",
+  net: "ネットワーク（受信 / 送信）",
   net_down: "ネットワーク（受信）",
   net_up: "ネットワーク（送信）",
 };
 
-export const STATS_INFO: InfoKind[] = ["cpu", "memory", "gpu", "net_down", "net_up"];
+/** 編集画面で行を分けて並べる */
+export const INFO_GROUPS: InfoKind[][] = [
+  ["time", "time_seconds", "date"],
+  ["system", "cpu", "memory", "gpu"],
+  ["net", "net_down", "net_up"],
+];
 
 /** netDown / netUp はバイト毎秒 */
 export type Stats = { cpu: number | null; memory: number | null; gpu: number | null; netDown: number | null; netUp: number | null };
+
+export type StatKey = keyof Stats;
+
+export const STATS_SERIES: Partial<Record<InfoKind, StatKey[]>> = {
+  cpu: ["cpu"],
+  memory: ["memory"],
+  gpu: ["gpu"],
+  net_down: ["netDown"],
+  net_up: ["netUp"],
+  system: ["cpu", "memory", "gpu"],
+  net: ["netDown", "netUp"],
+};
+
+export const STATS_INFO = Object.keys(STATS_SERIES) as InfoKind[];
+
+export const HISTORY_SECONDS = 60;
+
+export const showsGraph = (b: DeckButton) => !!b.graph && !!b.info && STATS_INFO.includes(b.info);
 
 /** タスク マネージャーと同じくビット毎秒で出す */
 function formatRate(bytes: number | null | undefined): string {
@@ -156,6 +185,10 @@ export function formatInfo(kind: InfoKind, now: Date, stats: Stats | null): stri
       return `↓ ${formatRate(stats?.netDown)}`;
     case "net_up":
       return `↑ ${formatRate(stats?.netUp)}`;
+    case "system":
+      return [pct("CPU", stats?.cpu), pct("メモリ", stats?.memory), pct("GPU", stats?.gpu)].join("\n");
+    case "net":
+      return `↓ ${formatRate(stats?.netDown)}\n↑ ${formatRate(stats?.netUp)}`;
   }
 }
 
@@ -171,7 +204,7 @@ export type HoldType = Hold["type"];
 export type ToggleState = { label: string; icon: Icon; color: string | null; action: Action };
 
 /** それ自体が状態を持つ操作や、画面内で完結する操作はトグルにしない */
-const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing", "obs"];
+const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing", "obs", "trackpad"];
 
 export const canToggle = (a: Action) => !NO_TOGGLE.includes(a.type);
 
@@ -187,13 +220,14 @@ export const HOLD_LABELS: Record<HoldType, string> = {
 export const REPEAT_INTERVALS = [50, 100, 200, 500];
 
 /** 長押しで「別の操作」に選べない種類。フォルダは作成処理が絡み、プラグインはボタンごとの状態と結び付いているため */
-export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin", "timer"];
+export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin", "timer", "trackpad"];
 
 /** 連打できない種類（繰り返すと開閉や開始・停止を往復してしまう） */
 const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system", "timer", "sound", "now_playing", "obs"];
 
 export function holdTypesFor(action: Action): HoldType[] {
   const types: HoldType[] = [];
+  if (action.type === "trackpad") return types;
   if (!NO_REPEAT.includes(action.type)) types.push("repeat");
   if (action.type === "hotkey") types.push("press");
   types.push("action");
@@ -260,7 +294,7 @@ export const OBS_EVENT_LABELS: Record<ObsEvent, string> = {
 };
 
 /** ボタンがないと意味をなさない操作は、自動化では選べない */
-export const AUTOMATION_EXCLUDE: ActionType[] = ["page", "system_panel", "timer"];
+export const AUTOMATION_EXCLUDE: ActionType[] = ["page", "system_panel", "timer", "trackpad"];
 
 export function emptyTrigger(type: TriggerType): Trigger {
   switch (type) {
@@ -313,6 +347,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   macro: "マクロ",
   window: "ウィンドウ操作",
   obs: "OBS",
+  trackpad: "トラックパッド",
   plugin: "プラグイン",
 };
 
@@ -320,7 +355,7 @@ export const ACTION_GROUPS: { label: string; types: ActionType[] }[] = [
   { label: "開く・移動", types: ["launch", "page", "window"] },
   { label: "キー入力", types: ["hotkey", "text", "macro"] },
   { label: "音声・システム", types: ["media", "now_playing", "mic_mute", "audio_device", "system_panel", "system"] },
-  { label: "ツール", types: ["timer", "sound"] },
+  { label: "ツール", types: ["timer", "sound", "trackpad"] },
   { label: "連携", types: ["obs", "plugin"] },
 ];
 
@@ -422,6 +457,8 @@ export function emptyAction(type: ActionType): Action {
       return { type, command: "scene", scene: "", input: "" };
     case "sound":
       return { type, path: "", volume: 100, retap: "stop" };
+    case "trackpad":
+      return { type, speed: 1.5 };
     case "plugin":
       return { type, pluginId: "", actionId: "", settings: {} };
     default:
@@ -429,7 +466,14 @@ export function emptyAction(type: ActionType): Action {
   }
 }
 
-export const runsInBackend = (a: Action) => !["none", "page", "system_panel", "timer", "sound", "obs"].includes(a.type);
+export const TRACKPAD_SPEEDS: [number, string][] = [
+  [1, "遅い"],
+  [1.5, "普通"],
+  [2.5, "速い"],
+  [4, "とても速い"],
+];
+
+export const runsInBackend =(a: Action) => !["none", "page", "system_panel", "timer", "sound", "obs", "trackpad"].includes(a.type);
 
 const btn = (slot: number, label: string, emoji: string, action: Action, color: string | null = null): DeckButton => ({
   id: uid(),
