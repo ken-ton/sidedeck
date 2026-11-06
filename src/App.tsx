@@ -8,6 +8,8 @@ import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import StatsGraph, { SERIES_COLORS } from "./StatsGraph";
 import Trackpad from "./Trackpad";
+import AssistantPad from "./AssistantPad";
+import { assistant } from "./assistant";
 import Settings from "./Settings";
 import SystemPanel from "./SystemPanel";
 import { onSoundsChange, playSound, stopSounds } from "./sound";
@@ -406,6 +408,7 @@ export default function App() {
   useEffect(() => {
     obs.configure(obsConf ? { url: obsConf.url, password: obsConf.password } : null);
   }, [obsConf?.url, obsConf?.password, !!obsConf]);
+  assistant.configure(deck?.assistant);
   /** 依存配列で比べられるよう JSON 文字列にする */
   const obsInputs = JSON.stringify([...new Set(deck?.pages.flatMap((p) => p.buttons.map((b) => (b.action.type === "obs" && b.action.command === "mute" ? b.action.input : ""))).filter(Boolean))]);
   useEffect(() => {
@@ -1021,6 +1024,13 @@ export default function App() {
             );
           }
           const face = isOn(b) ? toggledFace(b) : b;
+          if (!editing && b.action.type === "assistant") {
+            return (
+              <AssistantPad key={b.id} className="key" style={{ ...place(slot, b.size), ...(face.color ? { background: face.color } : {}) }}>
+                <ButtonFace button={face} />
+              </AssistantPad>
+            );
+          }
           if (!editing && b.action.type === "trackpad") {
             return (
               <Trackpad

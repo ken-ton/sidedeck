@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Action, DeckData, MacroStep, Stats } from "./deck";
 
+export type MicInput = { name: string; level: number };
+
 export type MonitorInfo = {
   gdiName: string;
   friendlyName: string;
@@ -87,6 +89,26 @@ export const api = {
   startKeyRecording: () => invoke<void>("start_key_recording"),
   stopKeyRecording: (keepTiming: boolean) => invoke<MacroStep[]>("stop_key_recording", { keepTiming }),
   getStats: () => invoke<Stats>("get_stats"),
+  assistantHasKey: () => invoke<boolean>("assistant_has_key"),
+  /** 空文字列で削除 */
+  assistantSetKey: (key: string) => invoke<void>("assistant_set_key", { key }),
+  /** 結果は "assistant-chat" イベントで届く */
+  /** webSearch が null ならウェブ検索を使わない */
+  assistantChat: (id: number, model: string, system: string, messages: unknown[], webSearch: { city: string; country: string; timezone: string } | null) =>
+    invoke<void>("assistant_chat", { id, model, system, messages, webSearch }),
+  assistantCancel: () => invoke<void>("assistant_cancel"),
+  /** 話し終わり（無音）まで録音して文字にする。取り消されたら空文字列 */
+  assistantListen: (device: string, model: string) => invoke<string>("assistant_listen", { device, model }),
+  assistantStopListening: () => invoke<void>("assistant_stop_listening"),
+  /** 録音中のマイクと音量（0〜1） */
+  micLevel: () => invoke<MicInput>("mic_level"),
+  listAudioInputs: () => invoke<{ id: string; name: string; isDefault: boolean }[]>("list_audio_inputs"),
+  /** ダウンロード済みのモデル */
+  whisperModels: () => invoke<string[]>("whisper_models"),
+  /** 進み具合は "whisper-download" イベントで届く */
+  downloadWhisperModel: (model: string) => invoke<void>("download_whisper_model", { model }),
+  voicevoxSpeakers: (url: string) => invoke<{ id: number; name: string }[]>("voicevox_speakers", { url }),
+  voicevoxSynthesize: (url: string, speaker: number, text: string) => invoke<ArrayBuffer>("voicevox_synthesize", { url, speaker, text }),
   /** x / y / w / h は WebView 内の CSS ピクセル。ここに透明なウィンドウを重ねてタッチを受ける */
   setTrackpadAreas: (areas: { id: string; speed: number; x: number; y: number; w: number; h: number }[]) => invoke<void>("set_trackpad_areas", { areas }),
   getNowPlaying: () => invoke<NowPlaying | null>("get_now_playing"),

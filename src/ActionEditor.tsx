@@ -530,6 +530,9 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
               </p>
             </>
           )}
+          {action.type === "assistant" && (
+            <p className="hint">タップして話しかけると、Claude が声で答えます。話している間にタップすると止まり、長押しで会話をリセットします。API キーと声は設定の「AI アシスタント」で選びます。大きさは 2×2 がおすすめです。</p>
+          )}
           {action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
         </div>
       )}

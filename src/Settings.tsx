@@ -7,6 +7,7 @@ import { DEFAULT_TOGGLE_SHORTCUT, misplacedButtons, type DeckData } from "./deck
 import ShortcutField from "./ShortcutField";
 import ObsSection from "./ObsSection";
 import AutomationsSection from "./AutomationsSection";
+import AssistantSection from "./AssistantSection";
 
 type Props = {
   deck: DeckData;
@@ -208,6 +209,8 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
         <AutomationsSection deck={deck} onDeckChange={onDeckChange} onError={onError} />
 
         <ObsSection deck={deck} onDeckChange={onDeckChange} />
+
+        <AssistantSection deck={deck} onDeckChange={onDeckChange} onError={onError} />
 
         <section>
           <h2>プラグイン</h2>

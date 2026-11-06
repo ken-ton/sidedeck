@@ -36,6 +36,7 @@ export type Action =
   | { type: "window"; command: WindowCommand; app: string; launch: string; monitor: string }
   /** speed は指の移動量に掛ける倍率 */
   | { type: "trackpad"; speed: number }
+  | { type: "assistant" }
   | { type: "plugin"; pluginId: string; actionId: string; settings: Record<string, unknown> };
 
 export type ActionType = Action["type"];
@@ -204,7 +205,7 @@ export type HoldType = Hold["type"];
 export type ToggleState = { label: string; icon: Icon; color: string | null; action: Action };
 
 /** それ自体が状態を持つ操作や、画面内で完結する操作はトグルにしない */
-const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing", "obs", "trackpad"];
+const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing", "obs", "trackpad", "assistant"];
 
 export const canToggle = (a: Action) => !NO_TOGGLE.includes(a.type);
 
@@ -220,14 +221,14 @@ export const HOLD_LABELS: Record<HoldType, string> = {
 export const REPEAT_INTERVALS = [50, 100, 200, 500];
 
 /** 長押しで「別の操作」に選べない種類。フォルダは作成処理が絡み、プラグインはボタンごとの状態と結び付いているため */
-export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin", "timer", "trackpad"];
+export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin", "timer", "trackpad", "assistant"];
 
 /** 連打できない種類（繰り返すと開閉や開始・停止を往復してしまう） */
 const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system", "timer", "sound", "now_playing", "obs"];
 
 export function holdTypesFor(action: Action): HoldType[] {
   const types: HoldType[] = [];
-  if (action.type === "trackpad") return types;
+  if (action.type === "trackpad" || action.type === "assistant") return types;
   if (!NO_REPEAT.includes(action.type)) types.push("repeat");
   if (action.type === "hotkey") types.push("press");
   types.push("action");
@@ -258,7 +259,61 @@ export type DeckData = {
   obs?: { enabled: boolean; url: string; password: string };
   /** デッキを前面に出す／下げるショートカット。未設定なら DEFAULT_TOGGLE_SHORTCUT、空配列なら無効 */
   toggleShortcut?: string[];
+  /** API キーは設定ファイルではなく、Windows の資格情報マネージャーに保存する */
+  assistant?: AssistantConfig;
 };
+
+export type AssistantVoice = "none" | "windows" | "voicevox";
+
+export type AssistantConfig = {
+  model: string;
+  voice: AssistantVoice;
+  /** speechSynthesis の voiceURI。空なら日本語の既定の声 */
+  windowsVoice: string;
+  voicevoxUrl: string;
+  voicevoxSpeaker: number | null;
+  /** システムプロンプトに足す、ユーザーの指示 */
+  instructions: string;
+  /** cpal のデバイス ID。空なら Windows の既定の録音デバイス */
+  inputDevice: string;
+  whisperModel: WhisperModel;
+  /** 読み上げの音量（0〜100） */
+  voiceVolume: number;
+  /** 天気やニュースなどをウェブで調べる（Claude API のウェブ検索） */
+  webSearch: boolean;
+  /** 天気などを答えるときの地域（例: 東京都渋谷区） */
+  city: string;
+};
+
+export type WhisperModel = "base" | "small" | "large-v3-turbo";
+
+export const WHISPER_MODELS: { id: WhisperModel; label: string; size: string }[] = [
+  { id: "base", label: "Base", size: "148 MB" },
+  { id: "small", label: "Small", size: "488 MB" },
+  { id: "large-v3-turbo", label: "Large v3 Turbo", size: "574 MB" },
+];
+
+export const DEFAULT_ASSISTANT: AssistantConfig = {
+  model: "claude-haiku-5-5",
+  voice: "windows",
+  windowsVoice: "",
+  voicevoxUrl: "http://127.0.0.1:50021",
+  voicevoxSpeaker: null,
+  instructions: "",
+  inputDevice: "",
+  whisperModel: "small",
+  voiceVolume: 100,
+  webSearch: true,
+  city: "",
+};
+
+export const ASSISTANT_MODELS: [string, string][] = [
+  ["claude-haiku-5-5", "Haiku 5.5"],
+  ["claude-sonnet-5-5", "Sonnet 5.5"],
+  ["claude-opus-5-5", "Opus 5.5"],
+];
+
+export const VOICE_LABELS: Record<AssistantVoice, string> = { windows: "Windows の音声", voicevox: "VOICEVOX", none: "読み上げない" };
 
 export type ObsEvent = "record_start" | "record_stop" | "stream_start" | "stream_stop";
 
@@ -294,7 +349,7 @@ export const OBS_EVENT_LABELS: Record<ObsEvent, string> = {
 };
 
 /** ボタンがないと意味をなさない操作は、自動化では選べない */
-export const AUTOMATION_EXCLUDE: ActionType[] = ["page", "system_panel", "timer", "trackpad"];
+export const AUTOMATION_EXCLUDE: ActionType[] = ["page", "system_panel", "timer", "trackpad", "assistant"];
 
 export function emptyTrigger(type: TriggerType): Trigger {
   switch (type) {
@@ -348,6 +403,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   window: "ウィンドウ操作",
   obs: "OBS",
   trackpad: "トラックパッド",
+  assistant: "AI アシスタント",
   plugin: "プラグイン",
 };
 
@@ -355,7 +411,7 @@ export const ACTION_GROUPS: { label: string; types: ActionType[] }[] = [
   { label: "開く・移動", types: ["launch", "page", "window"] },
   { label: "キー入力", types: ["hotkey", "text", "macro"] },
   { label: "音声・システム", types: ["media", "now_playing", "mic_mute", "audio_device", "system_panel", "system"] },
-  { label: "ツール", types: ["timer", "sound", "trackpad"] },
+  { label: "ツール", types: ["timer", "sound", "trackpad", "assistant"] },
   { label: "連携", types: ["obs", "plugin"] },
 ];
 
@@ -473,7 +529,7 @@ export const TRACKPAD_SPEEDS: [number, string][] = [
   [4, "とても速い"],
 ];
 
-export const runsInBackend =(a: Action) => !["none", "page", "system_panel", "timer", "sound", "obs", "trackpad"].includes(a.type);
+export const runsInBackend =(a: Action) => !["none", "page", "system_panel", "timer", "sound", "obs", "trackpad", "assistant"].includes(a.type);
 
 const btn = (slot: number, label: string, emoji: string, action: Action, color: string | null = null): DeckButton => ({
   id: uid(),

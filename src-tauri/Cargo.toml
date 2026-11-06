@@ -32,6 +32,8 @@ tokio-tungstenite = "0.26"
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
 ureq = "2"
 url = "2"
+cpal = "0.18"
+whisper-rs = "0.16"
 
 [dependencies.windows]
 version = "0.61"
@@ -56,6 +58,7 @@ features = [
   "Win32_System_Threading",
   "Win32_UI_WindowsAndMessaging",
   "Win32_UI_HiDpi",
+  "Win32_Security_Credentials",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_Security",
   "Win32_UI_Shell",
@@ -67,6 +70,10 @@ features = [
   "Media_Control",
   "Storage_Streams",
 ]
+
+# whisper.cpp は最適化しないと実用にならないほど遅いので、開発ビルドでも Release でビルドする
+[profile.dev.package.whisper-rs-sys]
+opt-level = 3
 
 [profile.release]
 codegen-units = 1

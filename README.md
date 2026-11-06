@@ -42,6 +42,7 @@ Tauri 2（Rust）＋ React / TypeScript で作っています。
   | サウンド | 音声ファイル（mp3・wav・ogg など）を再生する。再生中のタップで停止・最初から・重ねて再生を選べる |
   | OBS | シーンの切替、録画・配信・仮想カメラ・リプレイバッファの開始 / 停止、リプレイの保存、音声のミュート。状態に合わせてボタンの色が変わります（obs-websocket v5、OBS 28 以降） |
   | トラックパッド | ボタンをトラックパッドにします。1 本指でカーソル移動、タップで左クリック、2 本指でスクロール・右クリック、長押しからドラッグ。触ってもカーソルはデッキへ移りません |
+  | AI アシスタント | タップして話しかけると、Claude が声で答えます。声はこの PC の上で Whisper が文字にし、返事は Windows の音声か VOICEVOX で読み上げます。天気やニュースはウェブで調べて答えます（Claude の API キーが必要です）|
   | プラグイン | プラグインが追加した操作を実行します |
 - **長押し**: 長押ししたときに、連打する、押している間キーを押し続ける、別の操作を実行する、から選べます。
 - **トグル**: オンとオフで見た目と操作を切り替えるボタンにできます。
@@ -105,6 +106,7 @@ Tauri 2（Rust）＋ React / TypeScript で作っています。
 - Rust（stable, MSVC）
 - Visual Studio 2022 の「C++ によるデスクトップ開発」ワークロード（Windows SDK を含む）
 - Node.js 22 以降
+- LLVM（`winget install LLVM.LLVM`）と CMake。音声認識（whisper.cpp）のビルドに使います。PATH に通すか、環境変数 `LIBCLANG_PATH`（`libclang.dll` のあるフォルダ）と `CMAKE`（`cmake.exe` のパス）で指定します。CMake は Visual Studio に付いているものも使えます
 
 ### ビルド
 
@@ -139,6 +141,7 @@ cargo test -- --ignored --nocapture       # 実機のモニター・音声デバ
 This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
 
 - SideDeck has no telemetry and does not check for updates by itself. It opens URLs (such as the links in Settings, or `https://` and `steam://` targets assigned to buttons) only when the user taps them.
+- The AI assistant button sends what the user says (after it is transcribed on this PC), the conversation so far, the current date and time, and the region set in Settings to the Anthropic API, using the API key the user enters. When web search is on, Anthropic searches the web for it. The voice itself is never sent: speech is transcribed locally with Whisper. The Whisper model is downloaded from Hugging Face when the user asks for it, and VOICEVOX runs on this PC.
 - Plugins are separate programs that the user installs; they are not part of this program and are covered by their own policies.
 - SideDeck renders its UI with Microsoft Edge WebView2, which is covered by the [Microsoft Privacy Statement](https://privacy.microsoft.com/privacystatement).
 

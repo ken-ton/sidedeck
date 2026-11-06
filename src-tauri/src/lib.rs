@@ -1,5 +1,6 @@
 mod actions;
 mod apps;
+mod assistant;
 mod appvolume;
 mod audio;
 mod config;
@@ -14,6 +15,7 @@ mod nowplaying;
 mod plugins;
 mod shortcuts;
 mod stats;
+mod stt;
 mod update;
 mod system;
 mod trackpad;
@@ -327,6 +329,74 @@ async fn read_sound(path: String) -> CmdResult<tauri::ipc::Response> {
 async fn set_trackpad_areas(app: AppHandle, window: tauri::WebviewWindow, areas: Vec<trackpad::Area>) -> CmdResult<()> {
     let hwnd = window.hwnd().map_err(|e| e.to_string())?;
     trackpad::set_areas(&app, windows::Win32::Foundation::HWND(hwnd.0 as _), areas)
+}
+
+#[tauri::command]
+async fn assistant_has_key() -> bool {
+    assistant::has_key()
+}
+
+#[tauri::command]
+async fn assistant_set_key(key: String) -> CmdResult<()> {
+    assistant::set_key(&key)
+}
+
+#[tauri::command]
+async fn assistant_chat(
+    app: AppHandle,
+    id: u64,
+    model: String,
+    system: String,
+    messages: serde_json::Value,
+    web_search: Option<assistant::Location>,
+) -> CmdResult<()> {
+    assistant::start_chat(app, id, model, system, messages, web_search)
+}
+
+#[tauri::command]
+async fn assistant_cancel() {
+    assistant::cancel_chat();
+}
+
+#[tauri::command]
+async fn assistant_listen(app: AppHandle, device: String, model: String) -> CmdResult<String> {
+    tauri::async_runtime::spawn_blocking(move || stt::listen(&app, &device, &model)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn mic_level() -> stt::Level {
+    stt::level()
+}
+
+#[tauri::command]
+async fn assistant_stop_listening() {
+    stt::stop();
+}
+
+#[tauri::command]
+async fn list_audio_inputs() -> CmdResult<Vec<stt::InputDevice>> {
+    tauri::async_runtime::spawn_blocking(stt::list_inputs).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn whisper_models(app: AppHandle) -> Vec<String> {
+    stt::downloaded_models(&app)
+}
+
+#[tauri::command]
+async fn download_whisper_model(app: AppHandle, model: String) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || stt::download_model(&app, &model)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn voicevox_speakers(url: String) -> CmdResult<Vec<assistant::VoicevoxStyle>> {
+    tauri::async_runtime::spawn_blocking(move || assistant::voicevox_speakers(&url)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn voicevox_synthesize(url: String, speaker: i64, text: String) -> CmdResult<tauri::ipc::Response> {
+    let wav = tauri::async_runtime::spawn_blocking(move || assistant::voicevox_synthesize(&url, speaker, &text)).await.map_err(|e| e.to_string())??;
+    Ok(tauri::ipc::Response::new(wav))
 }
 
 #[tauri::command]
@@ -734,6 +804,18 @@ pub fn run() {
             get_now_playing,
             get_stats,
             set_trackpad_areas,
+            assistant_has_key,
+            assistant_set_key,
+            assistant_chat,
+            assistant_cancel,
+            assistant_listen,
+            assistant_stop_listening,
+            mic_level,
+            list_audio_inputs,
+            whisper_models,
+            download_whisper_model,
+            voicevox_speakers,
+            voicevox_synthesize,
             list_app_volumes,
             write_text_file,
             read_text_file,

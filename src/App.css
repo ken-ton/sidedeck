@@ -420,6 +420,120 @@ h2 {
 .key.trackpad.holding {
   box-shadow: inset 0 0 0 4px var(--accent);
 }
+.key.assistant {
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 6px;
+  padding: 12px;
+  text-align: left;
+}
+.key.assistant > :not(.assistant-log):not(.assistant-status):not(.assistant-meter) {
+  align-self: center;
+  margin-top: auto;
+}
+.assistant-log {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.assistant-meter {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+.assistant-meter > span {
+  display: block;
+  grid-area: 1 / 1;
+  width: 50cqmin;
+  aspect-ratio: 1;
+  border-radius: 50%;
+}
+.assistant-meter-ring {
+  border: 2px solid color-mix(in srgb, var(--danger) 35%, transparent);
+}
+.assistant-meter-dot {
+  background: color-mix(in srgb, var(--danger) 70%, transparent);
+  transition: transform 60ms linear;
+}
+.assistant-inputs {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.assistant-input {
+  text-align: center;
+  font-size: clamp(10px, 5cqmin, 13px);
+  color: var(--muted);
+}
+.assistant-input-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assistant-heard {
+  flex-shrink: 0;
+  font-size: clamp(11px, 6cqmin, 15px);
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assistant-reply {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: clamp(12px, 7.5cqmin, 18px);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.assistant-error {
+  color: var(--danger);
+}
+.assistant-status {
+  flex-shrink: 0;
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: clamp(10px, 5.5cqmin, 13px);
+  color: var(--muted);
+}
+.assistant-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+/* 聞き取り中は真ん中の円で分かるので、状態の点は出さない */
+.key.assistant.listening .assistant-dot {
+  display: none;
+}
+.key.assistant.thinking .assistant-dot {
+  background: #ffb224;
+  animation: assistant-pulse 0.6s ease-in-out infinite alternate;
+}
+.key.assistant.speaking .assistant-dot {
+  background: var(--ok);
+}
+.key.assistant.listening {
+  box-shadow: inset 0 0 0 3px var(--danger);
+}
+@keyframes assistant-pulse {
+  from {
+    opacity: 0.3;
+  }
+  to {
+    opacity: 1;
+  }
+}
 .key.now-playing img.face-icon {
   object-fit: cover;
   border-radius: 6px;
