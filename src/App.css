@@ -78,7 +78,8 @@ button.action.secondary {
 }
 
 input,
-textarea {
+textarea,
+select {
   font: inherit;
   color: inherit;
   width: 100%;
@@ -89,8 +90,22 @@ textarea {
   background: var(--bg);
   user-select: text;
 }
+select {
+  appearance: none;
+  padding-right: 44px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: right 22px center, right 16px center;
+  background-size: 6px 6px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+}
+select option {
+  background: var(--bg-2);
+  color: var(--text);
+}
 input:focus,
-textarea:focus {
+textarea:focus,
+select:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
