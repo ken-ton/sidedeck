@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { open as openFile, save as saveFile } from "@tauri-apps/plugin-dialog";
-import { api, AudioDevice, DeckStatus, NowPlaying, PluginButtonState, States, WindowApp } from "./api";
+import { api, AudioDevice, DeckStatus, NowPlaying, PluginButtonState, States, UpdateInfo, WindowApp } from "./api";
 import { Action, Automation, canToggle, exportPage, importPage, parsePageFile, formatInfo, Stats, STATS_INFO, cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, cellsOf, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
@@ -184,6 +185,7 @@ export default function App() {
   const [states, setStates] = useState<States>({ micMuted: null, defaultOutput: null });
   const [outputs, setOutputs] = useState<AudioDevice[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [update, setUpdate] = useState<UpdateInfo | null>(null);
   const [flash, setFlash] = useState<{ id: string; ok: boolean } | null>(null);
   const [runningMacros, setRunningMacros] = useState<Set<string>>(new Set());
   const [foreground, setForeground] = useState<WindowApp | null>(null);
@@ -253,6 +255,13 @@ export default function App() {
     setDeck(pruned);
     api.saveDeck(pruned).catch((e) => showToast(`保存できませんでした: ${e}`));
   }, [showToast]);
+
+  useEffect(() => {
+    const check = () => api.checkUpdate().then(setUpdate).catch(() => {});
+    check();
+    const t = setInterval(check, 6 * 60 * 60 * 1000);
+    return () => clearInterval(t);
+  }, []);
 
   useEffect(() => {
     api.getDeck().then((saved) => {
@@ -959,6 +968,11 @@ export default function App() {
           <button className={`tool ${editing ? "on" : ""}`} onClick={() => setEditing(!editing)}>
             {editing ? "完了" : "✎ 編集"}
           </button>
+          {update && (
+            <button className="tool update" onClick={() => openUrl(update.url).catch((e) => showToast(String(e)))} title={`新しいバージョン ${update.version} をダウンロード`}>
+              ⬆ {update.version}
+            </button>
+          )}
           <button className="tool" onClick={() => setOverlay("settings")} aria-label="設定">
             ⚙
           </button>
@@ -1088,6 +1102,7 @@ export default function App() {
             setStack([]);
             setOverlay(null);
           }}
+          update={update}
           onError={showToast}
           onClose={() => setOverlay(null)}
         />

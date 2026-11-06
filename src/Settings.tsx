@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { api, Config, DeckStatus, MonitorInfo, PluginInfo } from "./api";
+import { api, UpdateInfo, Config, DeckStatus, MonitorInfo, PluginInfo } from "./api";
 import { DEFAULT_TOGGLE_SHORTCUT, misplacedButtons, type DeckData } from "./deck";
 import ShortcutField from "./ShortcutField";
 import ObsSection from "./ObsSection";
@@ -15,13 +15,14 @@ type Props = {
   toggleShortcutError: string | null;
   shortcutUserOf: (keys: string[] | undefined) => string | null;
   onResetDeck: () => void;
+  update: UpdateInfo | null;
   onError: (msg: string) => void;
   onClose: () => void;
 };
 
 const monitorLabel = (m: MonitorInfo) => m.friendlyName || m.gdiName.replace("\\\\.\\", "");
 
-export default function Settings({ deck, status, onDeckChange, toggleShortcutError, shortcutUserOf, onResetDeck, onError, onClose }: Props) {
+export default function Settings({ deck, status, onDeckChange, toggleShortcutError, shortcutUserOf, onResetDeck, update, onError, onClose }: Props) {
   const [monitors, setMonitors] = useState<MonitorInfo[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -253,7 +254,7 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
           <p className="hint">ウィンドウを閉じてもトレイに常駐し続けます。完全に終了するときはこのボタンを使ってください。</p>
         </section>
 
-        <About onError={onError} />
+        <About update={update} onError={onError} />
       </aside>
     </div>
   );
@@ -261,7 +262,7 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
 
 const REPOSITORY = "https://github.com/ken-ton/sidedeck";
 
-function About({ onError }: { onError: (msg: string) => void }) {
+function About({ update, onError }: { update: UpdateInfo | null; onError: (msg: string) => void }) {
   const [version, setVersion] = useState<string | null>(null);
   useEffect(() => {
     getVersion().then(setVersion);
@@ -274,6 +275,14 @@ function About({ onError }: { onError: (msg: string) => void }) {
       <p>
         <strong>SideDeck</strong> <span className="about-version">{version ? `バージョン ${version}` : ""}</span>
       </p>
+      {update && (
+        <div className="update-notice">
+          <span>新しいバージョン {update.version} が出ています</span>
+          <button className="on" onClick={() => open(update.url)}>
+            ダウンロード
+          </button>
+        </div>
+      )}
       <div className="chips wrap">
         <button onClick={() => open(REPOSITORY)}>GitHub</button>
         <button onClick={() => open(`${REPOSITORY}/releases/latest`)}>最新のリリース</button>

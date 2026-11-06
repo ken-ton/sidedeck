@@ -14,6 +14,7 @@ mod nowplaying;
 mod plugins;
 mod shortcuts;
 mod stats;
+mod update;
 mod system;
 mod winops;
 
@@ -398,6 +399,12 @@ async fn reload_plugins(app: AppHandle) {
 }
 
 #[tauri::command]
+async fn check_update(app: AppHandle) -> CmdResult<Option<update::Update>> {
+    let current = app.package_info().version.to_string();
+    tauri::async_runtime::spawn_blocking(move || update::check(&current)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 fn quit_app(app: AppHandle) {
     restore_gamma(&app);
     app.exit(0);
@@ -710,6 +717,7 @@ pub fn run() {
             reload_plugins,
             open_plugins_folder,
             quit_app,
+            check_update,
             get_autostart,
             set_autostart,
             check_shortcut,

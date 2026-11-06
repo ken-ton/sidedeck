@@ -20,6 +20,7 @@ export type Config = {
 };
 
 export type InstalledGame = { id: string; title: string; source: "steam" | "epic"; launch: string; art: string | null };
+export type UpdateInfo = { version: string; url: string };
 export type StartApp = { name: string; target: string; packaged: boolean };
 export type DeckStatus = { active: boolean; monitorConnected: boolean };
 export type States = { micMuted: boolean | null; defaultOutput: string | null };
@@ -81,6 +82,7 @@ export const api = {
     invoke<void>("set_plugin_buttons", { buttons }),
   reloadPlugins: () => invoke<void>("reload_plugins"),
   openPluginsFolder: () => invoke<void>("open_plugins_folder"),
+  checkUpdate: () => invoke<UpdateInfo | null>("check_update"),
   quitApp: () => invoke<void>("quit_app"),
   startKeyRecording: () => invoke<void>("start_key_recording"),
   stopKeyRecording: (keepTiming: boolean) => invoke<MacroStep[]>("stop_key_recording", { keepTiming }),
