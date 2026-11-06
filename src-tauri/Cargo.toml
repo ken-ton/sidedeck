@@ -1,6 +1,6 @@
 [package]
 name = "sidedeck"
-version = "0.4.2"
+version = "0.4.3"
 description = "Turn a touchscreen monitor into a Stream Deck-style button panel for Windows"
 authors = ["KT"]
 license = "MIT"
