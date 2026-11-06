@@ -36,6 +36,8 @@ let messages: unknown[] = [];
 let turnStart = 0;
 let lastAt = 0;
 let chatId = 0;
+/** 聞き取りの ID。取り消したら増やし、古い聞き取りの結果は捨てる */
+let listenId = 0;
 let streamDone = true;
 const listeners = new Set<(s: AssistantState) => void>();
 
@@ -131,7 +133,7 @@ export const assistant = {
     start();
     switch (state.status) {
       case "listening":
-        api.assistantStopListening().catch(() => {});
+        api.assistantStopListening(listenId).catch(() => {});
         return;
       case "transcribing":
         return;
@@ -149,14 +151,17 @@ export const assistant = {
         set({ status: streamDone ? "idle" : "thinking" });
         return;
     }
+    const id = ++listenId;
     set({ status: "listening", error: null });
     let text: string;
     try {
-      text = (await api.assistantListen(conf.inputDevice, conf.whisperModel)).trim();
+      text = (await api.assistantListen(conf.inputDevice, conf.whisperModel, id)).trim();
     } catch (e) {
-      set({ status: "idle", error: String(e) });
+      if (id === listenId) set({ status: "idle", error: String(e) });
       return;
     }
+    // 文字にしている間にリセットされた
+    if (id !== listenId) return;
     if (!text) {
       set({ status: "idle" });
       return;
@@ -179,7 +184,8 @@ export const assistant = {
     chatId++;
     streamDone = true;
     api.assistantCancel().catch(() => {});
-    api.assistantStopListening().catch(() => {});
+    api.assistantStopListening(listenId).catch(() => {});
+    listenId++;
     speaker.stop();
     messages = [];
     set({ status: "idle", heard: "", reply: "", error: null });

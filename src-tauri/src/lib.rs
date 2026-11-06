@@ -18,7 +18,6 @@ mod stats;
 mod stt;
 mod update;
 mod system;
-mod trackpad;
 mod winops;
 
 use std::path::PathBuf;
@@ -326,12 +325,6 @@ async fn read_sound(path: String) -> CmdResult<tauri::ipc::Response> {
 }
 
 #[tauri::command]
-async fn set_trackpad_areas(app: AppHandle, window: tauri::WebviewWindow, areas: Vec<trackpad::Area>) -> CmdResult<()> {
-    let hwnd = window.hwnd().map_err(|e| e.to_string())?;
-    trackpad::set_areas(&app, windows::Win32::Foundation::HWND(hwnd.0 as _), areas)
-}
-
-#[tauri::command]
 async fn assistant_has_key() -> bool {
     assistant::has_key()
 }
@@ -359,8 +352,8 @@ async fn assistant_cancel() {
 }
 
 #[tauri::command]
-async fn assistant_listen(app: AppHandle, device: String, model: String) -> CmdResult<String> {
-    tauri::async_runtime::spawn_blocking(move || stt::listen(&app, &device, &model)).await.map_err(|e| e.to_string())?
+async fn assistant_listen(app: AppHandle, device: String, model: String, id: u64) -> CmdResult<String> {
+    tauri::async_runtime::spawn_blocking(move || stt::listen(&app, &device, &model, id)).await.map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -369,8 +362,8 @@ async fn mic_level() -> stt::Level {
 }
 
 #[tauri::command]
-async fn assistant_stop_listening() {
-    stt::stop();
+async fn assistant_stop_listening(id: u64) {
+    stt::stop(id);
 }
 
 #[tauri::command]
@@ -379,8 +372,8 @@ async fn list_audio_inputs() -> CmdResult<Vec<stt::InputDevice>> {
 }
 
 #[tauri::command]
-async fn whisper_models(app: AppHandle) -> Vec<String> {
-    stt::downloaded_models(&app)
+async fn whisper_models(app: AppHandle) -> stt::ModelStatus {
+    stt::model_status(&app)
 }
 
 #[tauri::command]
@@ -803,7 +796,6 @@ pub fn run() {
             get_states,
             get_now_playing,
             get_stats,
-            set_trackpad_areas,
             assistant_has_key,
             assistant_set_key,
             assistant_chat,

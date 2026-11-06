@@ -34,8 +34,6 @@ export type Action =
   | { type: "macro"; steps: MacroStep[]; repeat: number }
   /** app は小文字のプロセス名、monitor はモニターのデバイスパス */
   | { type: "window"; command: WindowCommand; app: string; launch: string; monitor: string }
-  /** speed は指の移動量に掛ける倍率 */
-  | { type: "trackpad"; speed: number }
   | { type: "assistant" }
   | { type: "plugin"; pluginId: string; actionId: string; settings: Record<string, unknown> };
 
@@ -205,7 +203,7 @@ export type HoldType = Hold["type"];
 export type ToggleState = { label: string; icon: Icon; color: string | null; action: Action };
 
 /** それ自体が状態を持つ操作や、画面内で完結する操作はトグルにしない */
-const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing", "obs", "trackpad", "assistant"];
+const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing", "obs", "assistant"];
 
 export const canToggle = (a: Action) => !NO_TOGGLE.includes(a.type);
 
@@ -221,14 +219,14 @@ export const HOLD_LABELS: Record<HoldType, string> = {
 export const REPEAT_INTERVALS = [50, 100, 200, 500];
 
 /** 長押しで「別の操作」に選べない種類。フォルダは作成処理が絡み、プラグインはボタンごとの状態と結び付いているため */
-export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin", "timer", "trackpad", "assistant"];
+export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin", "timer", "assistant"];
 
 /** 連打できない種類（繰り返すと開閉や開始・停止を往復してしまう） */
 const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system", "timer", "sound", "now_playing", "obs"];
 
 export function holdTypesFor(action: Action): HoldType[] {
   const types: HoldType[] = [];
-  if (action.type === "trackpad" || action.type === "assistant") return types;
+  if (action.type === "assistant") return types;
   if (!NO_REPEAT.includes(action.type)) types.push("repeat");
   if (action.type === "hotkey") types.push("press");
   types.push("action");
@@ -349,7 +347,7 @@ export const OBS_EVENT_LABELS: Record<ObsEvent, string> = {
 };
 
 /** ボタンがないと意味をなさない操作は、自動化では選べない */
-export const AUTOMATION_EXCLUDE: ActionType[] = ["page", "system_panel", "timer", "trackpad", "assistant"];
+export const AUTOMATION_EXCLUDE: ActionType[] = ["page", "system_panel", "timer", "assistant"];
 
 export function emptyTrigger(type: TriggerType): Trigger {
   switch (type) {
@@ -402,7 +400,6 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   macro: "マクロ",
   window: "ウィンドウ操作",
   obs: "OBS",
-  trackpad: "トラックパッド",
   assistant: "AI アシスタント",
   plugin: "プラグイン",
 };
@@ -411,7 +408,7 @@ export const ACTION_GROUPS: { label: string; types: ActionType[] }[] = [
   { label: "開く・移動", types: ["launch", "page", "window"] },
   { label: "キー入力", types: ["hotkey", "text", "macro"] },
   { label: "音声・システム", types: ["media", "now_playing", "mic_mute", "audio_device", "system_panel", "system"] },
-  { label: "ツール", types: ["timer", "sound", "trackpad", "assistant"] },
+  { label: "ツール", types: ["timer", "sound", "assistant"] },
   { label: "連携", types: ["obs", "plugin"] },
 ];
 
@@ -513,8 +510,6 @@ export function emptyAction(type: ActionType): Action {
       return { type, command: "scene", scene: "", input: "" };
     case "sound":
       return { type, path: "", volume: 100, retap: "stop" };
-    case "trackpad":
-      return { type, speed: 1.5 };
     case "plugin":
       return { type, pluginId: "", actionId: "", settings: {} };
     default:
@@ -522,14 +517,7 @@ export function emptyAction(type: ActionType): Action {
   }
 }
 
-export const TRACKPAD_SPEEDS: [number, string][] = [
-  [1, "遅い"],
-  [1.5, "普通"],
-  [2.5, "速い"],
-  [4, "とても速い"],
-];
-
-export const runsInBackend =(a: Action) => !["none", "page", "system_panel", "timer", "sound", "obs", "trackpad", "assistant"].includes(a.type);
+export const runsInBackend =(a: Action) => !["none", "page", "system_panel", "timer", "sound", "obs", "assistant"].includes(a.type);
 
 const btn = (slot: number, label: string, emoji: string, action: Action, color: string | null = null): DeckButton => ({
   id: uid(),
@@ -686,6 +674,12 @@ export function exportPage(deck: DeckData, page: Page): PageFile {
   return { format: "sidedeck-page", version: 1, columns: deck.columns, rows: deck.rows, page: { ...rest, folder: false }, folders };
 }
 
+/** 削除した種類の操作（以前のトラックパッドなど）は「なし」にする */
+const knownAction = (b: DeckButton): DeckButton => (b.action?.type in ACTION_LABELS ? b : { ...b, action: { type: "none" } });
+const knownActions = (p: Page): Page => ({ ...p, buttons: p.buttons.map(knownAction) });
+
+export const dropUnknownActions = (d: DeckData): DeckData => ({ ...d, pages: d.pages.map(knownActions) });
+
 export function parsePageFile(text: string): PageFile {
   let f: PageFile;
   try {
@@ -695,7 +689,7 @@ export function parsePageFile(text: string): PageFile {
   }
   if (f?.format !== "sidedeck-page" || !f.page || !Array.isArray(f.page.buttons) || !Array.isArray(f.folders)) throw new Error("SideDeck のページのファイルではありません");
   if (f.version !== 1) throw new Error("新しいバージョンの SideDeck で作られたファイルです");
-  return f;
+  return { ...f, page: knownActions(f.page), folders: f.folders.map(knownActions) };
 }
 
 /**

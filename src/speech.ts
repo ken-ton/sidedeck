@@ -25,13 +25,16 @@ export function loadVoices(): Promise<SpeechSynthesisVoice[]> {
 }
 
 /**
- * 一文ずつ順番に読み上げる。VOICEVOX は前の文を再生している間に次の文を合成しておく。
- * stop() すると、それまでに入れた文はすべて捨てる。
+ * 一文ずつ順番に読み上げる。VOICEVOX は一度に 1 文ずつしか合成しないので、
+ * 前の文を再生している間に次の 1 文だけを合成しておく。stop() すると、それまでに入れた文はすべて捨てる。
  */
+type VoicevoxItem = { gen: number; text: string; url: string; speaker: number; wav?: Promise<ArrayBuffer>; finish: () => void };
+
 export class Speaker {
   private generation = 0;
   private pending = 0;
-  private chain: Promise<void> = Promise.resolve();
+  private queue: VoicevoxItem[] = [];
+  private running = false;
   private audio: HTMLAudioElement | null = null;
 
   constructor(
@@ -74,26 +77,45 @@ export class Speaker {
       finish();
       return;
     }
-    const wav = api.voicevoxSynthesize(conf.voicevoxUrl, conf.voicevoxSpeaker, t);
-    this.chain = this.chain.then(async () => {
-      try {
-        const buf = await wav;
-        if (gen !== this.generation) return;
-        const url = URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
-        const audio = new Audio(url);
-        audio.volume = this.conf().voiceVolume / 100;
-        this.audio = audio;
-        await new Promise<void>((resolve) => {
-          audio.onended = audio.onpause = audio.onerror = () => resolve();
-          audio.play().catch(() => resolve());
-        });
-        URL.revokeObjectURL(url);
-      } catch (e) {
-        if (gen === this.generation) this.onError(String(e));
-      } finally {
-        finish();
+    this.queue.push({ gen, text: t, url: conf.voicevoxUrl, speaker: conf.voicevoxSpeaker, finish });
+    void this.run();
+  }
+
+  private synth(item: VoicevoxItem) {
+    item.wav ??= api.voicevoxSynthesize(item.url, item.speaker, item.text);
+    return item.wav;
+  }
+
+  private async run() {
+    if (this.running) return;
+    this.running = true;
+    try {
+      while (this.queue.length) {
+        const item = this.queue.shift()!;
+        if (item.gen !== this.generation) continue;
+        try {
+          const buf = await this.synth(item);
+          if (item.gen !== this.generation) continue;
+          const next = this.queue[0];
+          if (next) this.synth(next).catch(() => {});
+          const url = URL.createObjectURL(new Blob([buf], { type: "audio/wav" }));
+          const audio = new Audio(url);
+          audio.volume = this.conf().voiceVolume / 100;
+          this.audio = audio;
+          await new Promise<void>((resolve) => {
+            audio.onended = audio.onpause = audio.onerror = () => resolve();
+            audio.play().catch(() => resolve());
+          });
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          if (item.gen === this.generation) this.onError(String(e));
+        } finally {
+          item.finish();
+        }
       }
-    });
+    } finally {
+      this.running = false;
+    }
   }
 
   stop() {
@@ -102,7 +124,7 @@ export class Speaker {
     speechSynthesis.cancel();
     this.audio?.pause();
     this.audio = null;
-    this.chain = Promise.resolve();
+    this.queue = [];
   }
 }
 

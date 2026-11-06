@@ -85,7 +85,6 @@ export default function AssistantPad({ style, className, children }: { style?: C
     >
       {s.status === "listening" ? (
         <div className="assistant-meter">
-          <span className="assistant-meter-ring" />
           <span className="assistant-meter-dot" style={{ transform: `scale(${0.25 + level * 0.75})` }} />
           <div className="assistant-inputs">
             {input?.name && <InputRow input={input} />}

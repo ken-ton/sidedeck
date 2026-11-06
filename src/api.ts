@@ -98,19 +98,18 @@ export const api = {
     invoke<void>("assistant_chat", { id, model, system, messages, webSearch }),
   assistantCancel: () => invoke<void>("assistant_cancel"),
   /** 話し終わり（無音）まで録音して文字にする。取り消されたら空文字列 */
-  assistantListen: (device: string, model: string) => invoke<string>("assistant_listen", { device, model }),
-  assistantStopListening: () => invoke<void>("assistant_stop_listening"),
+  /** id は呼ぶたびに増やす。assistantStopListening(id) で、その id 以下の聞き取りを取り消す */
+  assistantListen: (device: string, model: string, id: number) => invoke<string>("assistant_listen", { device, model, id }),
+  assistantStopListening: (id: number) => invoke<void>("assistant_stop_listening", { id }),
   /** 録音中のマイクと音量（0〜1） */
   micLevel: () => invoke<MicInput>("mic_level"),
   listAudioInputs: () => invoke<{ id: string; name: string; isDefault: boolean }[]>("list_audio_inputs"),
-  /** ダウンロード済みのモデル */
-  whisperModels: () => invoke<string[]>("whisper_models"),
-  /** 進み具合は "whisper-download" イベントで届く */
+  /** ダウンロード済みのモデルと、ダウンロード中のモデル */
+  whisperModels: () => invoke<{ downloaded: string[]; downloading: string[] }>("whisper_models"),
+  /** 進み具合は "whisper-download"、終わり（失敗を含む）は "whisper-download-end" イベントで届く */
   downloadWhisperModel: (model: string) => invoke<void>("download_whisper_model", { model }),
   voicevoxSpeakers: (url: string) => invoke<{ id: number; name: string }[]>("voicevox_speakers", { url }),
   voicevoxSynthesize: (url: string, speaker: number, text: string) => invoke<ArrayBuffer>("voicevox_synthesize", { url, speaker, text }),
-  /** x / y / w / h は WebView 内の CSS ピクセル。ここに透明なウィンドウを重ねてタッチを受ける */
-  setTrackpadAreas: (areas: { id: string; speed: number; x: number; y: number; w: number; h: number }[]) => invoke<void>("set_trackpad_areas", { areas }),
   getNowPlaying: () => invoke<NowPlaying | null>("get_now_playing"),
   getStates: () => invoke<States>("get_states"),
   listAudioOutputs: () => invoke<AudioDevice[]>("list_audio_outputs"),

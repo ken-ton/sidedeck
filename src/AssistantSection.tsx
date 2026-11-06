@@ -52,25 +52,38 @@ export default function AssistantSection({ deck, onDeckChange, onError }: { deck
     api.listAudioInputs().then(setInputs).catch((e) => onError(String(e)));
   }, []);
 
+  // ダウンロードは設定画面を閉じても続くので、状態は Rust 側から読み、終わりはイベントで知る
   const [downloaded, setDownloaded] = useState<string[]>([]);
+  const [downloading, setDownloading] = useState<string[]>([]);
   const [progress, setProgress] = useState<{ model: string; received: number; total: number } | null>(null);
+  const refreshModels = () =>
+    api
+      .whisperModels()
+      .then((s) => {
+        setDownloaded(s.downloaded);
+        setDownloading(s.downloading);
+      })
+      .catch(() => {});
   useEffect(() => {
-    api.whisperModels().then(setDownloaded).catch(() => {});
-    const un = listen<{ model: string; received: number; total: number }>("whisper-download", (e) => setProgress(e.payload));
-    return () => void un.then((f) => f());
+    refreshModels();
+    const un = [
+      listen<{ model: string; received: number; total: number }>("whisper-download", (e) => setProgress(e.payload)),
+      listen<{ model: string; error: string | null }>("whisper-download-end", (e) => {
+        setProgress(null);
+        if (e.payload.error) onError(e.payload.error);
+        refreshModels();
+      }),
+    ];
+    return () => un.forEach((p) => p.then((f) => f()));
   }, []);
-  const download = async (model: string) => {
-    setProgress({ model, received: 0, total: 0 });
-    try {
-      await api.downloadWhisperModel(model);
-      setDownloaded(await api.whisperModels());
-    } catch (e) {
-      onError(String(e));
-    } finally {
-      setProgress(null);
-    }
+  const download = (model: string) => {
+    setDownloading((d) => [...d, model]);
+    // 結果は whisper-download-end で受け取る
+    api.downloadWhisperModel(model).catch(() => {});
   };
   const hasModel = downloaded.includes(conf.whisperModel);
+  const busy = downloading.includes(conf.whisperModel);
+  const shown = progress?.model === conf.whisperModel ? progress : null;
 
   const preview = () => new Speaker(() => conf, () => {}, onError).speak(SAMPLE);
 
@@ -120,9 +133,10 @@ export default function AssistantSection({ deck, onDeckChange, onError }: { deck
           </button>
         ))}
       </div>
-      {progress ? (
+      {busy ? (
         <p className="hint">
-          ダウンロードしています… {progress.total ? `${Math.floor((progress.received / progress.total) * 100)}%` : `${Math.floor(progress.received / 1e6)} MB`}
+          ダウンロードしています…{" "}
+          {shown && (shown.total ? `${Math.floor((shown.received / shown.total) * 100)}%` : `${Math.floor(shown.received / 1e6)} MB`)}
         </p>
       ) : hasModel ? (
         <p className="hint">ダウンロード済みです。</p>

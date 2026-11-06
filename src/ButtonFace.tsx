@@ -10,13 +10,17 @@ const textPresentation = (s: string) =>
     ? s
     : [...s.replace(/️/g, "")].map((c) => c + "︎").join("");
 
-/** override はプラグインからの表示（null / 未指定ならボタンの設定を使う） */
-/** lineColors は複数行の名前の各行の見出しの色（背景のグラフの凡例） */
-export default function ButtonFace({ button, sub, override, background, lineColors }: {
+/**
+ * override はプラグインからの表示（null / 未指定ならボタンの設定を使う）。
+ * table なら名前の各行を「見出し 値」の表に並べ（CPU / メモリ / GPU をまとめた表示など）、
+ * lineColors はその各行の見出しの色（背景のグラフの凡例）
+ */
+export default function ButtonFace({ button, sub, override, background, table, lineColors }: {
   button: DeckButton;
   sub?: string | null;
   override?: { title?: string | null; icon?: string | null };
   background?: ReactNode;
+  table?: boolean;
   lineColors?: string[];
 }) {
   const label = override?.title ?? button.label;
@@ -31,7 +35,7 @@ export default function ButtonFace({ button, sub, override, background, lineColo
           <span className="face-icon emoji mono">{textPresentation(icon.value)}</span>
         </>
       )}
-      {label && label.includes("\n") ? (
+      {label && table && label.includes("\n") ? (
         <span className={`face-label multi ${icon ? "" : "only"}`}>
           {label.split("\n").map((line, i) => {
             const at = line.indexOf(" ");

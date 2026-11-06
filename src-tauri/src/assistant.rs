@@ -243,11 +243,19 @@ fn run_chat(
         }
     }
     let mut blocks: Vec<Value> = blocks.into_iter().filter(|b| !b.is_null()).collect();
-    // 途中でフォールバックしたときは、最後の fallback より前の思考・ツール呼び出しを履歴に戻さない
+    // 途中でフォールバックしたときは、最後の fallback より前の思考・ツール呼び出しと、
+    // 結果とペアになっていないサーバー側のツール呼び出しを履歴に戻さない（戻すと次のリクエストが 400 になる）
     if let Some(last) = blocks.iter().rposition(|b| b["type"] == "fallback") {
+        let answered: std::collections::HashSet<String> =
+            blocks.iter().filter_map(|b| b["tool_use_id"].as_str().map(str::to_string)).collect();
         let mut i = 0;
         blocks.retain(|b| {
-            let keep = i >= last || !matches!(b["type"].as_str(), Some("thinking" | "redacted_thinking" | "tool_use"));
+            let drop = match b["type"].as_str() {
+                Some("thinking" | "redacted_thinking" | "tool_use") => true,
+                Some("server_tool_use") => !b["id"].as_str().is_some_and(|id| answered.contains(id)),
+                _ => false,
+            };
+            let keep = i >= last || !drop;
             i += 1;
             keep
         });

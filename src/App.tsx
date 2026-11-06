@@ -3,11 +3,10 @@ import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { open as openFile, save as saveFile } from "@tauri-apps/plugin-dialog";
 import { api, AudioDevice, DeckStatus, NowPlaying, PluginButtonState, States, UpdateInfo, WindowApp } from "./api";
-import { Action, Automation, canToggle, exportPage, importPage, parsePageFile, formatInfo, HISTORY_SECONDS, showsGraph, Stats, STATS_INFO, STATS_SERIES,cloneButton, CONFIRM_SYSTEM, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, cellsOf, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
+import { Action, Automation, canToggle, exportPage, importPage, parsePageFile, formatInfo, HISTORY_SECONDS, showsGraph, Stats, STATS_INFO, STATS_SERIES,cloneButton, CONFIRM_SYSTEM, dropUnknownActions, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, cellsOf, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import StatsGraph, { SERIES_COLORS } from "./StatsGraph";
-import Trackpad from "./Trackpad";
 import AssistantPad from "./AssistantPad";
 import { assistant } from "./assistant";
 import Settings from "./Settings";
@@ -269,7 +268,7 @@ export default function App() {
 
   useEffect(() => {
     api.getDeck().then((saved) => {
-      const d = saved?.version === 1 && saved.pages?.length ? pruneOrphanFolders(saved) : defaultDeck();
+      const d = saved?.version === 1 && saved.pages?.length ? pruneOrphanFolders(dropUnknownActions(saved)) : defaultDeck();
       setDeck(d);
       if (!saved) api.saveDeck(d);
     });
@@ -1031,20 +1030,6 @@ export default function App() {
               </AssistantPad>
             );
           }
-          if (!editing && b.action.type === "trackpad") {
-            return (
-              <Trackpad
-                key={b.id}
-                id={b.id}
-                className="key"
-                speed={b.action.speed}
-                style={{ ...place(slot, b.size), ...(face.color ? { background: face.color } : {}) }}
-                onError={showToast}
-              >
-                <ButtonFace button={face} />
-              </Trackpad>
-            );
-          }
           return (
             <button
               key={b.id}
@@ -1065,6 +1050,7 @@ export default function App() {
                 button={face}
                 sub={subFor(b)}
                 override={overrideFor(b)}
+                table={!!b.info && infoAsTitle(b)}
                 background={showsGraph(b) && <StatsGraph kind={b.info!} history={statsHistory} />}
                 lineColors={showsGraph(b) && STATS_SERIES[b.info!]!.length > 1 ? STATS_SERIES[b.info!]!.map((k) => SERIES_COLORS[k]) : undefined}
               />

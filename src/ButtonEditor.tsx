@@ -318,7 +318,7 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
 
         {canToggle(b.action) && <ToggleSection button={b} folders={folders} onChange={(toggle) => setB((x) => ({ ...x, toggle }))} onError={onError} />}
 
-        {!(b.toggle && canToggle(b.action)) && b.action.type !== "trackpad" && <HoldSection button={b} folders={folders} onChange={(hold) => setB((x) => ({ ...x, hold }))} onError={onError} />}
+        {!(b.toggle && canToggle(b.action)) && <HoldSection button={b} folders={folders} onChange={(hold) => setB((x) => ({ ...x, hold }))} onError={onError} />}
 
         <section>
           <h2>キーボードショートカット（任意）</h2>

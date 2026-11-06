@@ -2,20 +2,22 @@
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
+use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter, Manager};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-/// (設定の値, ファイル名, おおよその MB)
-pub const MODELS: &[(&str, &str, u64)] = &[
-    ("base", "ggml-base.bin", 148),
-    ("small", "ggml-small.bin", 488),
-    ("large-v3-turbo", "ggml-large-v3-turbo-q5_0.bin", 574),
+/// (設定の値, ファイル名, SHA-256)。SHA-256 は Hugging Face のファイル一覧（LFS の oid）の値で、ダウンロードした内容と照合する
+const MODELS: &[(&str, &str, &str)] = &[
+    ("base", "ggml-base.bin", "60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"),
+    ("small", "ggml-small.bin", "1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"),
+    ("large-v3-turbo", "ggml-large-v3-turbo-q5_0.bin", "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2"),
 ];
 const MODEL_BASE_URL: &str = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main";
 
@@ -28,7 +30,9 @@ const MAX_LENGTH: Duration = Duration::from_secs(30);
 
 static LEVEL: AtomicU32 = AtomicU32::new(0);
 static INPUT_NAME: Mutex<String> = Mutex::new(String::new());
-static STOP: AtomicBool = AtomicBool::new(false);
+/// これ以下の ID の聞き取りは取り消された。録音を始める前に届いた取り消しも失わないよう、ID で比べる
+static CANCELLED: AtomicU64 = AtomicU64::new(0);
+static DOWNLOADING: Mutex<Option<HashSet<String>>> = Mutex::new(None);
 static CONTEXT: Mutex<Option<(PathBuf, Arc<WhisperContext>)>> = Mutex::new(None);
 
 #[derive(Serialize)]
@@ -62,8 +66,12 @@ pub fn level() -> Level {
     Level { name: INPUT_NAME.lock().unwrap().clone(), level: f32::from_bits(LEVEL.load(Ordering::Relaxed)) }
 }
 
-pub fn stop() {
-    STOP.store(true, Ordering::SeqCst);
+pub fn stop(id: u64) {
+    CANCELLED.fetch_max(id, Ordering::SeqCst);
+}
+
+fn cancelled(id: u64) -> bool {
+    CANCELLED.load(Ordering::SeqCst) >= id
 }
 
 fn find_device(id: &str) -> Result<cpal::Device, String> {
@@ -76,8 +84,8 @@ fn find_device(id: &str) -> Result<cpal::Device, String> {
     host.default_input_device().ok_or_else(|| "マイクが見つかりません".to_string())
 }
 
-/// 話し終わるまで録音して 16kHz モノラルで返す。stop() されたら None
-fn record(device_id: &str) -> Result<Option<Vec<f32>>, String> {
+/// 話し終わるまで録音して 16kHz モノラルで返す。取り消されたら None
+fn record(device_id: &str, id: u64) -> Result<Option<Vec<f32>>, String> {
     let device = find_device(device_id)?;
     *INPUT_NAME.lock().unwrap() = device.to_string();
     let supported = device.default_input_config().map_err(|e| format!("マイクを使えません（{e}）"))?;
@@ -116,7 +124,6 @@ fn record(device_id: &str) -> Result<Option<Vec<f32>>, String> {
     .map_err(|e| format!("マイクを開けません（{e}）"))?;
     stream.play().map_err(|e| format!("録音を始められません（{e}）"))?;
 
-    STOP.store(false, Ordering::SeqCst);
     let started = Instant::now();
     let mut noise_floor = f32::MAX;
     let mut speech_at: Option<Instant> = None;
@@ -124,7 +131,7 @@ fn record(device_id: &str) -> Result<Option<Vec<f32>>, String> {
     let mut checked = 0usize;
     loop {
         std::thread::sleep(Duration::from_millis(50));
-        if STOP.load(Ordering::SeqCst) {
+        if cancelled(id) {
             LEVEL.store(0, Ordering::Relaxed);
             return Ok(None);
         }
@@ -222,18 +229,25 @@ pub fn models_dir(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_local_data_dir().map(|d| d.join("whisper")).map_err(|e| e.to_string())
 }
 
+fn model_info(model: &str) -> Result<&'static (&'static str, &'static str, &'static str), String> {
+    MODELS.iter().find(|(m, _, _)| *m == model).ok_or_else(|| "不明なモデルです".to_string())
+}
+
 fn model_path(app: &AppHandle, model: &str) -> Result<PathBuf, String> {
-    let (_, file, _) = MODELS.iter().find(|(m, _, _)| *m == model).ok_or("不明なモデルです")?;
+    let (_, file, _) = model_info(model)?;
     Ok(models_dir(app)?.join(file))
 }
 
 /// 取り消されたら空文字列
-pub fn listen(app: &AppHandle, device_id: &str, model: &str) -> Result<String, String> {
+pub fn listen(app: &AppHandle, device_id: &str, model: &str, id: u64) -> Result<String, String> {
     let path = model_path(app, model)?;
     if !path.exists() {
         return Err("設定の「AI アシスタント」で、音声認識のモデルをダウンロードしてください".into());
     }
-    let Some(audio) = record(device_id)? else { return Ok(String::new()) };
+    if cancelled(id) {
+        return Ok(String::new());
+    }
+    let Some(audio) = record(device_id, id)? else { return Ok(String::new()) };
     let _ = app.emit("stt-transcribing", ());
     let started = Instant::now();
     let text = transcribe(&path, &audio)?;
@@ -244,8 +258,16 @@ pub fn listen(app: &AppHandle, device_id: &str, model: &str) -> Result<String, S
     Ok(text)
 }
 
-pub fn downloaded_models(app: &AppHandle) -> Vec<String> {
-    MODELS.iter().filter(|(m, _, _)| model_path(app, m).is_ok_and(|p| p.exists())).map(|(m, _, _)| m.to_string()).collect()
+#[derive(Serialize)]
+pub struct ModelStatus {
+    downloaded: Vec<String>,
+    downloading: Vec<String>,
+}
+
+pub fn model_status(app: &AppHandle) -> ModelStatus {
+    let downloaded = MODELS.iter().filter(|(m, _, _)| model_path(app, m).is_ok_and(|p| p.exists())).map(|(m, _, _)| m.to_string()).collect();
+    let downloading = DOWNLOADING.lock().unwrap().iter().flatten().cloned().collect();
+    ModelStatus { downloaded, downloading }
 }
 
 #[derive(Serialize, Clone)]
@@ -255,9 +277,30 @@ struct Progress<'a> {
     total: u64,
 }
 
+#[derive(Serialize, Clone)]
+struct Finished<'a> {
+    model: &'a str,
+    error: Option<String>,
+}
+
+/// 同じモデルを並行してダウンロードすると、同じ一時ファイルに書き込んで壊れるので、1 つずつにする
 pub fn download_model(app: &AppHandle, model: &str) -> Result<(), String> {
     let path = model_path(app, model)?;
-    let (_, file, _) = MODELS.iter().find(|(m, _, _)| *m == model).ok_or("不明なモデルです")?;
+    if !DOWNLOADING.lock().unwrap().get_or_insert_default().insert(model.to_string()) {
+        return Err("このモデルはダウンロード中です".into());
+    }
+    let part = path.with_extension("part");
+    let result = download(app, model, &path, &part);
+    if result.is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+    DOWNLOADING.lock().unwrap().get_or_insert_default().remove(model);
+    let _ = app.emit("whisper-download-end", Finished { model, error: result.as_ref().err().cloned() });
+    result
+}
+
+fn download(app: &AppHandle, model: &str, path: &Path, part: &Path) -> Result<(), String> {
+    let (_, file, sha256) = model_info(model)?;
     std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
     let res = ureq::AgentBuilder::new()
         .timeout_connect(Duration::from_secs(15))
@@ -267,9 +310,9 @@ pub fn download_model(app: &AppHandle, model: &str) -> Result<(), String> {
         .call()
         .map_err(|e| format!("モデルをダウンロードできません（{e}）"))?;
     let total = res.header("content-length").and_then(|s| s.parse().ok()).unwrap_or(0);
-    let part = path.with_extension("part");
-    let mut out = std::fs::File::create(&part).map_err(|e| e.to_string())?;
+    let mut out = std::fs::File::create(part).map_err(|e| e.to_string())?;
     let mut reader = res.into_reader();
+    let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 1 << 16];
     let (mut received, mut last) = (0u64, Instant::now());
     loop {
@@ -278,6 +321,7 @@ pub fn download_model(app: &AppHandle, model: &str) -> Result<(), String> {
             break;
         }
         out.write_all(&buf[..n]).map_err(|e| e.to_string())?;
+        hasher.update(&buf[..n]);
         received += n as u64;
         if last.elapsed() > Duration::from_millis(200) {
             last = Instant::now();
@@ -285,11 +329,9 @@ pub fn download_model(app: &AppHandle, model: &str) -> Result<(), String> {
         }
     }
     drop(out);
-    if total > 0 && received != total {
-        let _ = std::fs::remove_file(&part);
-        return Err("ダウンロードが途中で終わりました".into());
+    let digest: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
+    if digest != *sha256 {
+        return Err("ダウンロードしたモデルが壊れているか、正しいファイルではありません。もう一度ダウンロードしてください".into());
     }
-    std::fs::rename(&part, &path).map_err(|e| e.to_string())?;
-    let _ = app.emit("whisper-download", Progress { model, received, total: received });
-    Ok(())
+    std::fs::rename(part, path).map_err(|e| e.to_string())
 }
