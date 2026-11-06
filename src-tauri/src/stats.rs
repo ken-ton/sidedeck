@@ -1,5 +1,8 @@
 use serde::Serialize;
 use std::sync::Mutex;
+use std::time::Instant;
+use windows::Win32::NetworkManagement::IpHelper::{FreeMibTable, GetIfTable2, MIB_IF_TABLE2};
+use windows::Win32::NetworkManagement::Ndis::IfOperStatusUp;
 use windows::core::w;
 use windows::Win32::System::Performance::{
     PdhAddEnglishCounterW, PdhCollectQueryData, PdhGetFormattedCounterArrayW, PdhOpenQueryW, PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT, PDH_FMT_DOUBLE,
@@ -13,6 +16,9 @@ pub struct Stats {
     cpu: Option<f64>,
     memory: Option<f64>,
     gpu: Option<f64>,
+    /// バイト毎秒
+    net_down: Option<f64>,
+    net_up: Option<f64>,
 }
 
 struct Query {
@@ -62,6 +68,43 @@ fn values(counter: PDH_HCOUNTER) -> Option<Vec<f64>> {
     }
 }
 
+static NET_LAST: Mutex<Option<(Instant, u64, u64)>> = Mutex::new(None);
+
+/// 物理アダプターの送受信バイト数の合計。仮想スイッチやフィルターのインターフェースは同じ通信を二重に数えるので除く
+fn net_octets() -> Option<(u64, u64)> {
+    unsafe {
+        let mut table: *mut MIB_IF_TABLE2 = std::ptr::null_mut();
+        if GetIfTable2(&mut table).is_err() {
+            return None;
+        }
+        let rows = std::slice::from_raw_parts((*table).Table.as_ptr(), (*table).NumEntries as usize);
+        let (mut rx, mut tx) = (0u64, 0u64);
+        for r in rows {
+            let flags = r.InterfaceAndOperStatusFlags._bitfield;
+            let hardware = flags & 1 != 0;
+            let filter = flags & 2 != 0;
+            if hardware && !filter && r.OperStatus == IfOperStatusUp {
+                rx += r.InOctets;
+                tx += r.OutOctets;
+            }
+        }
+        FreeMibTable(table as *const _);
+        Some((rx, tx))
+    }
+}
+
+fn net_rates() -> (Option<f64>, Option<f64>) {
+    let Some((rx, tx)) = net_octets() else { return (None, None) };
+    let now = Instant::now();
+    let prev = NET_LAST.lock().unwrap().replace((now, rx, tx));
+    let Some((t, prx, ptx)) = prev else { return (None, None) };
+    let secs = now.duration_since(t).as_secs_f64();
+    if secs < 0.2 {
+        return (None, None);
+    }
+    (Some(rx.saturating_sub(prx) as f64 / secs), Some(tx.saturating_sub(ptx) as f64 / secs))
+}
+
 fn memory() -> Option<f64> {
     let mut m = MEMORYSTATUSEX { dwLength: size_of::<MEMORYSTATUSEX>() as u32, ..Default::default() };
     unsafe { GlobalMemoryStatusEx(&mut m) }.ok()?;
@@ -74,10 +117,14 @@ pub fn get() -> Stats {
         *guard = open();
     }
     let Some(q) = guard.as_ref() else {
-        return Stats { memory: memory(), ..Default::default() };
+        let (net_down, net_up) = net_rates();
+        return Stats { memory: memory(), net_down, net_up, ..Default::default() };
     };
     unsafe { PdhCollectQueryData(q.query) };
+    let (net_down, net_up) = net_rates();
     Stats {
+        net_down,
+        net_up,
         cpu: values(q.cpu).and_then(|v| v.first().copied()).map(|v| v.clamp(0.0, 100.0)),
         memory: memory(),
         // プロセスごとの 3D エンジンの使用率を足したもの（タスクマネージャーの GPU に近い）
@@ -93,6 +140,6 @@ mod tests {
         super::get();
         std::thread::sleep(std::time::Duration::from_secs(1));
         let s = super::get();
-        println!("cpu={:?} memory={:?} gpu={:?}", s.cpu, s.memory, s.gpu);
+        println!("cpu={:?} memory={:?} gpu={:?} down={:?} up={:?}", s.cpu, s.memory, s.gpu, s.net_down, s.net_up);
     }
 }

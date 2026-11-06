@@ -81,6 +81,7 @@ export const api = {
     invoke<void>("set_plugin_buttons", { buttons }),
   reloadPlugins: () => invoke<void>("reload_plugins"),
   openPluginsFolder: () => invoke<void>("open_plugins_folder"),
+  quitApp: () => invoke<void>("quit_app"),
   startKeyRecording: () => invoke<void>("start_key_recording"),
   stopKeyRecording: (keepTiming: boolean) => invoke<MacroStep[]>("stop_key_recording", { keepTiming }),
   getStats: () => invoke<Stats>("get_stats"),

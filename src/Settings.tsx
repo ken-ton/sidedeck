@@ -245,6 +245,14 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
           </button>
         </section>
 
+        <section>
+          <h2>終了</h2>
+          <button className="danger" onClick={() => api.quitApp().catch((e) => onError(String(e)))}>
+            SideDeck を終了
+          </button>
+          <p className="hint">ウィンドウを閉じてもトレイに常駐し続けます。完全に終了するときはこのボタンを使ってください。</p>
+        </section>
+
         <About onError={onError} />
       </aside>
     </div>

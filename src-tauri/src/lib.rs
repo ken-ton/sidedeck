@@ -398,6 +398,12 @@ async fn reload_plugins(app: AppHandle) {
 }
 
 #[tauri::command]
+fn quit_app(app: AppHandle) {
+    restore_gamma(&app);
+    app.exit(0);
+}
+
+#[tauri::command]
 async fn open_plugins_folder(app: AppHandle) -> CmdResult<()> {
     use tauri_plugin_opener::OpenerExt;
     let dir = plugins::dir(&app);
@@ -703,6 +709,7 @@ pub fn run() {
             set_plugin_buttons,
             reload_plugins,
             open_plugins_folder,
+            quit_app,
             get_autostart,
             set_autostart,
             check_shortcut,

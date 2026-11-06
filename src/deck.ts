@@ -107,7 +107,7 @@ export function misplacedButtons(page: Page, columns: number, rows: number): num
   return n;
 }
 
-export type InfoKind = "time" | "time_seconds" | "date" | "cpu" | "memory" | "gpu";
+export type InfoKind = "time" | "time_seconds" | "date" | "cpu" | "memory" | "gpu" | "net_down" | "net_up";
 
 export const INFO_LABELS: Record<InfoKind, string> = {
   time: "時刻",
@@ -116,11 +116,23 @@ export const INFO_LABELS: Record<InfoKind, string> = {
   cpu: "CPU 使用率",
   memory: "メモリ使用率",
   gpu: "GPU 使用率",
+  net_down: "ネットワーク（受信）",
+  net_up: "ネットワーク（送信）",
 };
 
-export const STATS_INFO: InfoKind[] = ["cpu", "memory", "gpu"];
+export const STATS_INFO: InfoKind[] = ["cpu", "memory", "gpu", "net_down", "net_up"];
 
-export type Stats = { cpu: number | null; memory: number | null; gpu: number | null };
+/** netDown / netUp はバイト毎秒 */
+export type Stats = { cpu: number | null; memory: number | null; gpu: number | null; netDown: number | null; netUp: number | null };
+
+/** タスク マネージャーと同じくビット毎秒で出す */
+function formatRate(bytes: number | null | undefined): string {
+  if (bytes == null) return "--";
+  const bits = bytes * 8;
+  if (bits >= 1e9) return `${(bits / 1e9).toFixed(1)} Gbps`;
+  if (bits >= 1e6) return `${(bits / 1e6).toFixed(bits >= 1e8 ? 0 : 1)} Mbps`;
+  return `${Math.round(bits / 1e3)} Kbps`;
+}
 
 export const WEEKDAYS = "日月火水木金土";
 
@@ -140,6 +152,10 @@ export function formatInfo(kind: InfoKind, now: Date, stats: Stats | null): stri
       return pct("メモリ", stats?.memory);
     case "gpu":
       return pct("GPU", stats?.gpu);
+    case "net_down":
+      return `↓ ${formatRate(stats?.netDown)}`;
+    case "net_up":
+      return `↑ ${formatRate(stats?.netUp)}`;
   }
 }
 
