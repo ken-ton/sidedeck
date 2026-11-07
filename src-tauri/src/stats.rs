@@ -5,7 +5,7 @@ use windows::Win32::NetworkManagement::IpHelper::{FreeMibTable, GetIfTable2, MIB
 use windows::Win32::NetworkManagement::Ndis::IfOperStatusUp;
 use windows::core::w;
 use windows::Win32::System::Performance::{
-    PdhAddEnglishCounterW, PdhCollectQueryData, PdhGetFormattedCounterArrayW, PdhOpenQueryW, PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT, PDH_FMT_DOUBLE,
+    PdhAddEnglishCounterW, PdhCloseQuery, PdhCollectQueryData, PdhGetFormattedCounterArrayW, PdhOpenQueryW, PDH_FMT_COUNTERVALUE_ITEM_W, PDH_FMT, PDH_FMT_DOUBLE,
     PDH_HCOUNTER, PDH_HQUERY, PDH_MORE_DATA,
 };
 use windows::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
@@ -25,7 +25,12 @@ struct Query {
     query: PDH_HQUERY,
     cpu: PDH_HCOUNTER,
     gpu: PDH_HCOUNTER,
+    /// 有効な値が取れなかった連続回数
+    stale: u32,
 }
+
+/// システム時刻が戻されると、使い回しているクエリの GPU 使用率（100ns タイマー）が無効なまま戻らないことがある
+const REOPEN_AFTER: u32 = 3;
 
 // PDH のハンドルはスレッドに縛られない
 unsafe impl Send for Query {}
@@ -44,11 +49,35 @@ fn open() -> Option<Query> {
         PdhAddEnglishCounterW(query, w!("\\Processor Information(_Total)\\% Processor Utility"), 0, &mut cpu);
         PdhAddEnglishCounterW(query, w!("\\GPU Engine(*engtype_3D)\\Utilization Percentage"), 0, &mut gpu);
         PdhCollectQueryData(query);
-        Some(Query { query, cpu, gpu })
+        Some(Query { query, cpu, gpu, stale: 0 })
     }
 }
 
-fn values(counter: PDH_HCOUNTER) -> Option<Vec<f64>> {
+enum Sample {
+    Missing,
+    /// インスタンスはあるが、どれも有効な値ではない
+    Invalid,
+    Valid(Vec<f64>),
+}
+
+impl Sample {
+    fn ok(&self) -> Option<&[f64]> {
+        match self {
+            Sample::Valid(v) => Some(v),
+            _ => None,
+        }
+    }
+}
+
+fn values(counter: PDH_HCOUNTER) -> Sample {
+    raw_values(counter).map_or(Sample::Missing, |(count, valid)| match (count, valid.is_empty()) {
+        (0, _) => Sample::Missing,
+        (_, true) => Sample::Invalid,
+        _ => Sample::Valid(valid),
+    })
+}
+
+fn raw_values(counter: PDH_HCOUNTER) -> Option<(u32, Vec<f64>)> {
     if counter.is_invalid() {
         return None;
     }
@@ -64,7 +93,7 @@ fn values(counter: PDH_HCOUNTER) -> Option<Vec<f64>> {
         if PdhGetFormattedCounterArrayW(counter, format, &mut size, &mut count, Some(buf.as_mut_ptr())) != 0 {
             return None;
         }
-        Some(buf[..count as usize].iter().filter(|i| i.FmtValue.CStatus == 0).map(|i| i.FmtValue.Anonymous.doubleValue).collect())
+        Some((count, buf[..count as usize].iter().filter(|i| i.FmtValue.CStatus == 0).map(|i| i.FmtValue.Anonymous.doubleValue).collect()))
     }
 }
 
@@ -116,19 +145,25 @@ pub fn get() -> Stats {
     if guard.is_none() {
         *guard = open();
     }
-    let Some(q) = guard.as_ref() else {
+    let Some(q) = guard.as_mut() else {
         let (net_down, net_up) = net_rates();
         return Stats { memory: memory(), net_down, net_up, ..Default::default() };
     };
     unsafe { PdhCollectQueryData(q.query) };
     let (net_down, net_up) = net_rates();
+    let (cpu, gpu) = (values(q.cpu), values(q.gpu));
+    q.stale = if matches!(cpu, Sample::Invalid) || matches!(gpu, Sample::Invalid) { q.stale + 1 } else { 0 };
+    if q.stale >= REOPEN_AFTER {
+        unsafe { PdhCloseQuery(q.query) };
+        *guard = None;
+    }
     Stats {
         net_down,
         net_up,
-        cpu: values(q.cpu).and_then(|v| v.first().copied()).map(|v| v.clamp(0.0, 100.0)),
+        cpu: cpu.ok().and_then(|v| v.first().copied()).map(|v| v.clamp(0.0, 100.0)),
         memory: memory(),
         // プロセスごとの 3D エンジンの使用率を足したもの（タスクマネージャーの GPU に近い）
-        gpu: values(q.gpu).map(|v| v.iter().sum::<f64>().clamp(0.0, 100.0)),
+        gpu: gpu.ok().map(|v| v.iter().sum::<f64>().clamp(0.0, 100.0)),
     }
 }
 
