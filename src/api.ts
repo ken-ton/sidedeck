@@ -101,6 +101,12 @@ export const api = {
   /** id は呼ぶたびに増やす。assistantStopListening(id) で、その id 以下の聞き取りを取り消す */
   assistantListen: (device: string, model: string, id: number) => invoke<string>("assistant_listen", { device, model, id }),
   assistantStopListening: (id: number) => invoke<void>("assistant_stop_listening", { id }),
+  midiPorts: () => invoke<{ inputs: string[]; outputs: string[] }>("midi_ports"),
+  midiSend: (port: string, data: number[]) => invoke<void>("midi_send", { port, data }),
+  /** 受信した MIDI は "midi-in" イベントで届く。空ならすべて閉じる */
+  midiListen: (ports: string[]) => invoke<void>("midi_listen", { ports }),
+  pluginKeyUp: (pluginId: string, actionId: string, context: string, settings: Record<string, unknown>) =>
+    invoke<void>("plugin_key_up", { pluginId, actionId, context, settings }),
   /** 録音中のマイクと音量（0〜1） */
   micLevel: () => invoke<MicInput>("mic_level"),
   listAudioInputs: () => invoke<{ id: string; name: string; isDefault: boolean }[]>("list_audio_inputs"),

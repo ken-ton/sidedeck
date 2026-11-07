@@ -35,6 +35,7 @@ url = "2"
 cpal = "0.18"
 whisper-rs = "0.16"
 sha2 = "0.10"
+midir = "0.11"
 
 [dependencies.windows]
 version = "0.61"

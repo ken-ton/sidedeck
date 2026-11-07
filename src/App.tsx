@@ -3,7 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { open as openFile, save as saveFile } from "@tauri-apps/plugin-dialog";
 import { api, AudioDevice, DeckStatus, NowPlaying, PluginButtonState, States, UpdateInfo, WindowApp } from "./api";
-import { Action, Automation, canToggle, exportPage, importPage, parsePageFile, formatInfo, HISTORY_SECONDS, showsGraph, Stats, STATS_INFO, STATS_SERIES,cloneButton, CONFIRM_SYSTEM, dropUnknownActions, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, cellsOf, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
+import { Action, Automation, canToggle, exportPage, importPage, parsePageFile, formatInfo, HISTORY_SECONDS, showsGraph, Stats, STATS_INFO, STATS_SERIES,cloneButton, CONFIRM_SYSTEM, dropUnknownActions, midiFeedback, midiKey, midiMessage, formatDuration, DeckButton, DeckData, defaultDeck, firstEmptySlot, fits, cellsOf, misplacedButtons, occupancy, sizeOf, Page, pruneOrphanFolders, runsInBackend, shortcutEntries, shortcutUser, SYSTEM_LABELS, TOGGLE_SHORTCUT_ID, toggledFace, uid } from "./deck";
 import ButtonEditor from "./ButtonEditor";
 import ButtonFace from "./ButtonFace";
 import StatsGraph, { SERIES_COLORS } from "./StatsGraph";
@@ -48,6 +48,9 @@ function beep(ctx: AudioContext) {
     osc.stop(at + 0.25);
   }
 }
+
+/** 押した瞬間に実行し、離したことも伝える（押している間だけ効く操作のため）。長押しの設定があるボタンは除く */
+const momentary = (b: DeckButton) => !b.hold && (b.action.type === "midi" || b.action.type === "plugin");
 
 function stopPress(p: Press) {
   p.timers.forEach((t) => window.clearTimeout(t));
@@ -234,6 +237,20 @@ export default function App() {
   }, [anyTimerRunning]);
   const [obsState, setObsState] = useState<ObsState>(obs.state);
   useEffect(() => obs.subscribe(setObsState), []);
+  // 受信用のポートに届いた Note / CC の最後の値。0 より大きければ、同じ番号を送るボタンを光らせる
+  const [midiValues, setMidiValues] = useState<Map<string, number>>(new Map());
+  const midiInput = deck?.midiInput ?? "";
+  useEffect(() => {
+    setMidiValues(new Map());
+    api.midiListen(midiInput ? [midiInput] : []).catch((e) => showToast(String(e)));
+    if (!midiInput) return;
+    const un = listen<{ port: string; data: number[] }>("midi-in", ({ payload }) => {
+      if (payload.port !== midiInput) return;
+      const f = midiFeedback(payload.data);
+      if (f) setMidiValues((m) => new Map(m).set(f.key, f.value));
+    });
+    return () => void un.then((f) => f());
+  }, [midiInput]);
   const [sounds, setSounds] = useState<Set<string>>(new Set());
   useEffect(() => onSoundsChange(setSounds), []);
   /** 確認待ちの PC の操作（もう一度タップすると実行） */
@@ -539,6 +556,17 @@ export default function App() {
       return;
     }
     if (a.type === "system_panel") return setOverlay("system");
+    // ショートカットや自動化から実行したときは、押してすぐ離したことにする
+    if (a.type === "midi") {
+      try {
+        await api.midiSend(a.port, midiMessage(a, true));
+        window.setTimeout(() => void api.midiSend(a.port, midiMessage(a, false)).catch(() => {}), 100);
+        return true;
+      } catch (e) {
+        if (!quiet) showToast(String(e));
+        return false;
+      }
+    }
     if (a.type === "timer") {
       tapTimer(b.id, a);
       return true;
@@ -780,6 +808,21 @@ export default function App() {
       drag.current = { id: b.id, pointerId: e.pointerId, x: e.clientX, y: e.clientY, grab, active: false };
       return;
     }
+    if (!editing && momentary(b) && !press.current) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const p: Press = { id: b.id, timers: [], intervals: [], fired: true };
+      press.current = p;
+      setPressed(b.id);
+      const a = b.action;
+      if (a.type === "midi") {
+        api.midiSend(a.port, midiMessage(a, true)).catch((err) => showToast(String(err)));
+        p.release = () => void api.midiSend(a.port, midiMessage(a, false)).catch(() => {});
+      } else if (a.type === "plugin") {
+        run(b);
+        p.release = () => void api.pluginKeyUp(a.pluginId, a.actionId, b.id, a.settings).catch(() => {});
+      }
+      return;
+    }
     const hold = b.hold;
     if (editing || !hold || press.current) return;
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -818,7 +861,7 @@ export default function App() {
 
   const tapSlot = (slot: number, b?: DeckButton) => {
     // 長押しを設定したボタンは pointer イベントで処理する
-    if (!editing) return b && !b.hold && tap(b);
+    if (!editing) return b && !b.hold && !momentary(b) && tap(b);
     if (Date.now() - draggedAt.current < 500) return;
     if (moving) return moveTo(slot);
     if (!b && clipboard) return placeClone(clipboard.button, clipboard.pages, slot);
@@ -926,6 +969,7 @@ export default function App() {
     if (runningMacros.has(b.id)) c.push("running");
     if (a.type === "timer" && timers[b.id]?.startedAt != null) c.push("running");
     if (a.type === "timer" && timers[b.id]?.done) c.push("blink");
+    if (a.type === "midi" && (midiValues.get(midiKey(a)) ?? 0) > 0) c.push("active");
     if (sounds.has(b.id) || sounds.has(`${b.id}:hold`)) c.push("running");
     const ps = a.type === "plugin" ? pluginStates[b.id] : undefined;
     if (ps?.state === "active") c.push("active");

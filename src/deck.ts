@@ -35,9 +35,48 @@ export type Action =
   /** app は小文字のプロセス名、monitor はモニターのデバイスパス */
   | { type: "window"; command: WindowCommand; app: string; launch: string; monitor: string }
   | { type: "assistant" }
+  /** channel は 1〜16。押したときに value を、離したときに 0（Note Off）を送る */
+  | { type: "midi"; port: string; kind: MidiKind; channel: number; number: number; value: number }
   | { type: "plugin"; pluginId: string; actionId: string; settings: Record<string, unknown> };
 
 export type ActionType = Action["type"];
+
+export type MidiKind = "note" | "cc";
+
+export const MIDI_KIND_LABELS: Record<MidiKind, string> = { note: "ノート", cc: "コントロールチェンジ（CC）" };
+
+type MidiAction = Extract<Action, { type: "midi" }>;
+
+/** 押したとき（on）と離したときに送るメッセージ */
+export function midiMessage(a: MidiAction, on: boolean): number[] {
+  const ch = (Math.min(16, Math.max(1, a.channel)) - 1) & 0x0f;
+  const num = Math.min(127, Math.max(0, a.number)) & 0x7f;
+  const value = on ? Math.min(127, Math.max(1, a.value)) : 0;
+  if (a.kind === "cc") return [0xb0 | ch, num, value];
+  return on ? [0x90 | ch, num, value] : [0x80 | ch, num, 0];
+}
+
+/** 受け取った MIDI を、ボタンを光らせるための鍵と値にする。関係のないメッセージは null */
+export function midiFeedback(data: number[]): { key: string; value: number } | null {
+  const [status, num, value = 0] = data;
+  const ch = (status & 0x0f) + 1;
+  switch (status & 0xf0) {
+    case 0x90:
+      return { key: `note:${ch}:${num}`, value };
+    case 0x80:
+      return { key: `note:${ch}:${num}`, value: 0 };
+    case 0xb0:
+      return { key: `cc:${ch}:${num}`, value };
+    default:
+      return null;
+  }
+}
+
+export const midiKey = (a: MidiAction) => `${a.kind}:${a.channel}:${a.number}`;
+
+const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+/** 60 を C4 とする書き方 */
+export const noteName = (n: number) => `${NOTE_NAMES[n % 12]}${Math.floor(n / 12) - 1}`;
 
 export type DeckButton = {
   id: string;
@@ -203,7 +242,7 @@ export type HoldType = Hold["type"];
 export type ToggleState = { label: string; icon: Icon; color: string | null; action: Action };
 
 /** それ自体が状態を持つ操作や、画面内で完結する操作はトグルにしない */
-const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing", "obs", "assistant"];
+const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing", "obs", "assistant", "midi"];
 
 export const canToggle = (a: Action) => !NO_TOGGLE.includes(a.type);
 
@@ -226,7 +265,7 @@ const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system", "tim
 
 export function holdTypesFor(action: Action): HoldType[] {
   const types: HoldType[] = [];
-  if (action.type === "assistant") return types;
+  if (action.type === "assistant" || action.type === "midi") return types;
   if (!NO_REPEAT.includes(action.type)) types.push("repeat");
   if (action.type === "hotkey") types.push("press");
   types.push("action");
@@ -257,6 +296,8 @@ export type DeckData = {
   obs?: { enabled: boolean; url: string; password: string };
   /** デッキを前面に出す／下げるショートカット。未設定なら DEFAULT_TOGGLE_SHORTCUT、空配列なら無効 */
   toggleShortcut?: string[];
+  /** ボタンを光らせるために受信する MIDI のポート */
+  midiInput?: string;
   /** API キーは設定ファイルではなく、Windows の資格情報マネージャーに保存する */
   assistant?: AssistantConfig;
 };
@@ -400,6 +441,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   macro: "マクロ",
   window: "ウィンドウ操作",
   obs: "OBS",
+  midi: "MIDI",
   assistant: "AI アシスタント",
   plugin: "プラグイン",
 };
@@ -409,7 +451,7 @@ export const ACTION_GROUPS: { label: string; types: ActionType[] }[] = [
   { label: "キー入力", types: ["hotkey", "text", "macro"] },
   { label: "音声・システム", types: ["media", "now_playing", "mic_mute", "audio_device", "system_panel", "system"] },
   { label: "ツール", types: ["timer", "sound", "assistant"] },
-  { label: "連携", types: ["obs", "plugin"] },
+  { label: "連携", types: ["obs", "midi", "plugin"] },
 ];
 
 export const WINDOW_LABELS: Record<WindowCommand, string> = {
@@ -510,6 +552,8 @@ export function emptyAction(type: ActionType): Action {
       return { type, command: "scene", scene: "", input: "" };
     case "sound":
       return { type, path: "", volume: 100, retap: "stop" };
+    case "midi":
+      return { type, port: "", kind: "note", channel: 1, number: 60, value: 127 };
     case "plugin":
       return { type, pluginId: "", actionId: "", settings: {} };
     default:
@@ -517,7 +561,7 @@ export function emptyAction(type: ActionType): Action {
   }
 }
 
-export const runsInBackend =(a: Action) => !["none", "page", "system_panel", "timer", "sound", "obs", "assistant"].includes(a.type);
+export const runsInBackend =(a: Action) => !["none", "page", "system_panel", "timer", "sound", "obs", "assistant", "midi"].includes(a.type);
 
 const btn = (slot: number, label: string, emoji: string, action: Action, color: string | null = null): DeckButton => ({
   id: uid(),

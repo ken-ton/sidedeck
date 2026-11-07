@@ -347,6 +347,26 @@ async fn handle_connection(app: AppHandle, stream: TcpStream) {
                     }
                 }
             }
+            Some("midiSend") => {
+                let port = v["port"].as_str().unwrap_or_default();
+                let data: Vec<u8> = v["data"].as_array().into_iter().flatten().filter_map(|b| b.as_u64()).map(|b| b as u8).collect();
+                if let Err(e) = crate::midi::send(port, &data) {
+                    report_midi_error(&host, &plugin_id, &e);
+                }
+            }
+            Some("getMidiPorts") => {
+                let reply = match crate::midi::ports() {
+                    Ok(p) => json!({ "event": "midiPorts", "requestId": v["requestId"], "ports": p }),
+                    Err(e) => json!({ "event": "midiPorts", "requestId": v["requestId"], "error": e }),
+                };
+                let _ = tx.send(reply.to_string());
+            }
+            Some("midiListen") => {
+                let ports = v["ports"].as_array().into_iter().flatten().filter_map(|p| p.as_str().map(str::to_string)).collect();
+                if let Err(e) = crate::midi::set_listening(&app, &format!("plugin:{plugin_id}"), ports) {
+                    report_midi_error(&host, &plugin_id, &e);
+                }
+            }
             Some("log") => {
                 let dir = host.entries.lock().unwrap().get(&plugin_id).map(|e| e.dir.clone());
                 if let Some(dir) = dir {
@@ -358,6 +378,7 @@ async fn handle_connection(app: AppHandle, stream: TcpStream) {
     }
 
     writer.abort();
+    let _ = crate::midi::set_listening(&app, &format!("plugin:{plugin_id}"), Vec::new());
     {
         let mut entries = host.entries.lock().unwrap();
         if let Some(e) = entries.get_mut(&plugin_id) {
@@ -418,6 +439,22 @@ pub fn list(app: &AppHandle) -> Vec<PluginInfo> {
 
 pub fn key_down(app: &AppHandle, plugin_id: &str, action: &str, context: &str, settings: Value) -> Result<(), String> {
     app.state::<Host>().send(plugin_id, json!({ "event": "keyDown", "context": context, "action": action, "settings": settings }))
+}
+
+/// 押している間だけ効く操作のために、ボタンを離したことも知らせる
+pub fn key_up(app: &AppHandle, plugin_id: &str, action: &str, context: &str, settings: Value) -> Result<(), String> {
+    app.state::<Host>().send(plugin_id, json!({ "event": "keyUp", "context": context, "action": action, "settings": settings }))
+}
+
+pub fn midi_in(app: &AppHandle, plugin_id: &str, port: &str, data: &[u8]) {
+    let _ = app.state::<Host>().send(plugin_id, json!({ "event": "midiIn", "port": port, "data": data }));
+}
+
+fn report_midi_error(host: &Host, plugin_id: &str, error: &str) {
+    let dir = host.entries.lock().unwrap().get(plugin_id).map(|e| e.dir.clone());
+    if let Some(dir) = dir {
+        append_log(&dir, &format!("[SideDeck] {error}"));
+    }
 }
 
 pub async fn request(app: &AppHandle, plugin_id: &str, mut msg: Value) -> Result<Value, String> {

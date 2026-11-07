@@ -11,6 +11,7 @@ mod games;
 mod icons;
 mod input;
 mod macros;
+mod midi;
 mod nowplaying;
 mod plugins;
 mod shortcuts;
@@ -354,6 +355,27 @@ async fn assistant_cancel() {
 #[tauri::command]
 async fn assistant_listen(app: AppHandle, device: String, model: String, id: u64) -> CmdResult<String> {
     tauri::async_runtime::spawn_blocking(move || stt::listen(&app, &device, &model, id)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn midi_ports() -> CmdResult<midi::Ports> {
+    tauri::async_runtime::spawn_blocking(midi::ports).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn midi_send(port: String, data: Vec<u8>) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || midi::send(&port, &data)).await.map_err(|e| e.to_string())?
+}
+
+/// ボタンを光らせるために受信するポート（空ならすべて閉じる）
+#[tauri::command]
+async fn midi_listen(app: AppHandle, ports: Vec<String>) -> CmdResult<()> {
+    tauri::async_runtime::spawn_blocking(move || midi::set_listening(&app, "app", ports)).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn plugin_key_up(app: AppHandle, plugin_id: String, action_id: String, context: String, settings: serde_json::Value) -> CmdResult<()> {
+    plugins::key_up(&app, &plugin_id, &action_id, &context, settings)
 }
 
 #[tauri::command]
@@ -803,6 +825,10 @@ pub fn run() {
             assistant_listen,
             assistant_stop_listening,
             mic_level,
+            midi_ports,
+            midi_send,
+            midi_listen,
+            plugin_key_up,
             list_audio_inputs,
             whisper_models,
             download_whisper_model,

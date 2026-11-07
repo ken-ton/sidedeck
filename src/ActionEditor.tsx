@@ -28,6 +28,7 @@ import { playSound, stopSounds } from "./sound";
 import { obs } from "./obs";
 import MacroFields from "./MacroFields";
 import WindowFields from "./WindowFields";
+import MidiFields from "./MidiFields";
 import PluginFields from "./PluginFields";
 
 /** 新しいフォルダを作るときの仮の pageId */
@@ -51,6 +52,7 @@ export function validateAction(a: Action): string | null {
   if (a.type === "obs" && a.command === "scene" && !a.scene.trim()) return "シーンを指定してください";
   if (a.type === "obs" && a.command === "mute" && !a.input.trim()) return "音声ソースを指定してください";
   if (a.type === "sound" && !a.path.trim()) return "音声ファイルを選んでください";
+  if (a.type === "midi" && !a.port) return "送り先の MIDI ポートを選んでください";
   if (a.type === "macro" && a.steps.length === 0) return "ステップを 1 つ以上追加してください";
   if (a.type === "macro" && a.steps.some((s) => (s.type === "keys" || s.type === "key_down" || s.type === "key_up") && s.keys.length === 0))
     return "キーが未設定のステップがあります";
@@ -509,6 +511,7 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
             </>
           )}
           {action.type === "obs" && <ObsFields action={action} onChange={onChange} />}
+          {action.type === "midi" && <MidiFields action={action} onChange={onChange} />}
           {action.type === "sound" && <SoundFields action={action} onChange={onChange} onSuggestLabel={onSuggestLabel} />}
           {action.type === "now_playing" && (
             <p className="hint">

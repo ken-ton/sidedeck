@@ -83,10 +83,33 @@ SideDeck が終了すると、プラグインのプロセスも終了します�
 
 ### keyDown
 ボタンが押されたとき（グローバルショートカットやマクロから実行されたときも含む）。マクロから実行された場合、`context` は空文字です。
+ボタンに触れた瞬間に送ります（長押しの動作を設定したボタンは、指を離したとき、または長押しと判定したとき）。
 
 ```json
 { "event": "keyDown", "context": "<ボタンの id>", "action": "count", "settings": { "step": 1 } }
 ```
+
+### keyUp
+ボタンから指を離したとき。押している間だけ効く操作に使います。
+ボタンを直接押したときだけ送り、長押しの動作を設定したボタンや、ショートカット・マクロ・自動化から実行したときは送りません。
+
+```json
+{ "event": "keyUp", "context": "<ボタンの id>", "action": "count", "settings": { "step": 1 } }
+```
+
+### midiIn
+`midiListen` で指定したポートに MIDI が届いたとき。
+
+```json
+{ "event": "midiIn", "port": "loopMIDI Port 2", "data": [144, 0, 127] }
+```
+
+### midiPorts（getMidiPorts への返事）
+
+```json
+{ "event": "midiPorts", "requestId": "…", "ports": { "inputs": ["…"], "outputs": ["…"] } }
+```
+失敗したときは `ports` の代わりに `"error": "理由"` が付きます。
 
 ### getOptions
 編集画面で `optionsFrom` の選択肢が必要になったとき。8 秒以内に `options` で返事をしてください。
@@ -130,7 +153,29 @@ SideDeck が終了すると、プラグインのプロセスも終了します�
 { "event": "log", "message": "…" }
 ```
 
+### getMidiPorts
+MIDI のポートの一覧を問い合わせます。返事は `midiPorts` で届きます。
+
+```json
+{ "event": "getMidiPorts", "requestId": "…" }
+```
+
+### midiSend
+MIDI を送ります（`data` はステータスバイトから始まるバイト列、256 バイトまで）。失敗すると `plugin.log` に書きます。
+
+```json
+{ "event": "midiSend", "port": "loopMIDI Port", "data": [144, 0, 127] }
+```
+
+### midiListen
+受信するポートを置き換えます。空の配列で受信をやめます。プラグインが終了すると自動でやめます。
+
+```json
+{ "event": "midiListen", "ports": ["loopMIDI Port 2"] }
+```
+
 ## 例
+
 
 `examples/plugins/counter` に、ビルド不要の最小のプラグイン（Node.js）があります。
 フォルダごと `%APPDATA%\com.kenton.sidedeck\plugins\` にコピーすると使えます。

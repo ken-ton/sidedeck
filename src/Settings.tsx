@@ -8,6 +8,7 @@ import ShortcutField from "./ShortcutField";
 import ObsSection from "./ObsSection";
 import AutomationsSection from "./AutomationsSection";
 import AssistantSection from "./AssistantSection";
+import MidiSection from "./MidiSection";
 
 type Props = {
   deck: DeckData;
@@ -209,6 +210,8 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
         <AutomationsSection deck={deck} onDeckChange={onDeckChange} onError={onError} />
 
         <ObsSection deck={deck} onDeckChange={onDeckChange} />
+
+        <MidiSection deck={deck} onDeckChange={onDeckChange} />
 
         <AssistantSection deck={deck} onDeckChange={onDeckChange} onError={onError} />
 
