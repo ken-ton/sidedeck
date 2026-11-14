@@ -64,6 +64,7 @@ export const api = {
   deckEnter: () => invoke<void>("deck_enter"),
   deckExit: () => invoke<void>("deck_exit"),
   setFocusable: (focusable: boolean) => invoke<void>("set_focusable", { focusable }),
+  restoreCursor: () => invoke<void>("restore_cursor"),
   openTouchSetup: () => invoke<void>("open_touch_setup"),
   getAutostart: () => invoke<{ enabled: boolean; devBuild: boolean }>("get_autostart"),
   setAutostart: (enabled: boolean) => invoke<void>("set_autostart", { enabled }),

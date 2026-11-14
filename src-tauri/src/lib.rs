@@ -39,6 +39,15 @@ struct Deck {
     /// Deck モニターの矩形（物理ピクセル）
     rect: (i32, i32, u32, u32),
     gamma: f32,
+    /// マウスカーソルが最後に Deck モニターの外にあった位置
+    cursor_outside: Option<(i32, i32)>,
+}
+
+impl Deck {
+    fn contains(&self, x: i32, y: i32) -> bool {
+        let (rx, ry, w, h) = self.rect;
+        x >= rx && y >= ry && x < rx + w as i32 && y < ry + h as i32
+    }
 }
 
 struct AppState {
@@ -129,6 +138,38 @@ fn enter_deck(app: &AppHandle) -> Result<(), String> {
     place_main_fullscreen(app);
     emit_status(app);
     Ok(())
+}
+
+/// タッチすると Windows はカーソルをその位置へ動かす。タッチ後に戻せるよう、Deck モニターの外にあった位置を覚えておく。
+fn spawn_cursor_watcher(app: AppHandle) {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+    std::thread::spawn(move || loop {
+        std::thread::sleep(Duration::from_millis(30));
+        let st = app.state::<AppState>();
+        let mut d = st.deck.lock().unwrap();
+        if !d.active {
+            d.cursor_outside = None;
+            continue;
+        }
+        let mut p = POINT::default();
+        if unsafe { GetCursorPos(&mut p) }.is_ok() && !d.contains(p.x, p.y) {
+            d.cursor_outside = Some((p.x, p.y));
+        }
+    });
+}
+
+#[tauri::command]
+async fn restore_cursor(app: AppHandle) {
+    use windows::Win32::Foundation::POINT;
+    use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, SetCursorPos};
+    let st = app.state::<AppState>();
+    let d = st.deck.lock().unwrap();
+    let Some((x, y)) = d.cursor_outside.filter(|_| d.active) else { return };
+    let mut p = POINT::default();
+    if unsafe { GetCursorPos(&mut p) }.is_ok() && d.contains(p.x, p.y) {
+        let _ = unsafe { SetCursorPos(x, y) };
+    }
 }
 
 /// ソフトウェア減光は Windows に残り続けるので、Deck モードの終了時と SideDeck の終了時に元に戻す。
@@ -773,6 +814,7 @@ pub fn run() {
 
             build_tray(app)?;
             spawn_monitor_watcher(app.handle().clone());
+            spawn_cursor_watcher(app.handle().clone());
             foreground::spawn_watcher(app.handle().clone());
             Ok(())
         })
@@ -793,6 +835,7 @@ pub fn run() {
             deck_enter,
             deck_exit,
             set_focusable,
+            restore_cursor,
             open_touch_setup,
             get_deck,
             save_deck,

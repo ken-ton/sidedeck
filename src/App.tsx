@@ -413,6 +413,24 @@ export default function App() {
     if (!editing) setMoving(null);
   }, [editing, overlay, status.active]);
 
+  // タッチすると Windows がカーソルをその位置へ動かすので、ゲームなどで使っていた元の位置へ戻す
+  useEffect(() => {
+    if (!status.active || editing || overlay === "settings") return;
+    let last = 0;
+    const restore = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      // 押している間も指が動くたびにカーソルが付いてくる
+      if (e.type === "pointermove") {
+        if (e.timeStamp - last < 50) return;
+        last = e.timeStamp;
+      }
+      api.restoreCursor();
+    };
+    const types = ["pointerdown", "pointermove", "pointerup", "pointercancel"] as const;
+    types.forEach((t) => window.addEventListener(t, restore, true));
+    return () => types.forEach((t) => window.removeEventListener(t, restore, true));
+  }, [editing, overlay, status.active]);
+
   const roots = useMemo(() => deck?.pages.filter((p) => !p.folder) ?? [], [deck]);
   const page = useMemo(() => {
     if (!deck) return null;
