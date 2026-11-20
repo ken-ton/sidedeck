@@ -123,6 +123,12 @@ h2 {
   margin: 0 0 10px;
 }
 
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .hint {
   color: var(--muted);
   font-size: 0.85rem;

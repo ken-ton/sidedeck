@@ -69,11 +69,20 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
         </div>
 
         <section>
-          <h2>Deck モード</h2>
-          <button className={`action ${status.active ? "secondary" : ""}`} onClick={toggleDeck} disabled={!status.active && !status.monitorConnected}>
-            {status.active ? "Deck モードを終了" : status.monitorConnected ? "Deck モードを開始" : "Deck 用モニターが未接続"}
-          </button>
-          <p className="hint">Deck モード中は、Deck 用モニターにデッキを全画面で表示します。タップしても他のアプリからフォーカスを奪いません。</p>
+          <h2>開始と終了</h2>
+          <div className="button-row">
+            <button className={`action ${status.active ? "secondary" : ""}`} onClick={toggleDeck} disabled={!status.active && !status.monitorConnected}>
+              {status.active ? "Deck モードを終了" : status.monitorConnected ? "Deck モードを開始" : "Deck 用モニターが未接続"}
+            </button>
+            <button className="danger" onClick={() => api.quitApp().catch((e) => onError(String(e)))}>
+              SideDeck を終了
+            </button>
+          </div>
+          <p className="hint">
+            Deck モードでは、Deck 用モニターにデッキを全画面で表示します。タップしても他のアプリからフォーカスを奪いません。
+            <br />
+            SideDeck はウィンドウを閉じてもトレイに常駐し続けます。完全に終了するときは「SideDeck を終了」を使ってください。
+          </p>
         </section>
 
         {config && (
@@ -263,14 +272,6 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
           >
             {confirmReset ? "もう一度タップすると、すべてのボタンを初期状態に戻します" : "デッキを初期状態に戻す"}
           </button>
-        </section>
-
-        <section>
-          <h2>終了</h2>
-          <button className="danger" onClick={() => api.quitApp().catch((e) => onError(String(e)))}>
-            SideDeck を終了
-          </button>
-          <p className="hint">ウィンドウを閉じてもトレイに常駐し続けます。完全に終了するときはこのボタンを使ってください。</p>
         </section>
 
         <About update={update} onError={onError} />
