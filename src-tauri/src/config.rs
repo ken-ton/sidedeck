@@ -11,6 +11,7 @@ pub struct Config {
     pub deck_monitor: Option<String>,
     pub deck_monitor_name: Option<String>,
     pub auto_deck: bool,
+    pub show_in_taskbar: bool,
     /// 構造はフロントエンドが管理する。
     pub deck: Option<serde_json::Value>,
     /// 旧バージョン（プライマリを切り替えていた頃）の画面配置。

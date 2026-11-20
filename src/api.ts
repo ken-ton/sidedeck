@@ -19,6 +19,7 @@ export type Config = {
   deckMonitor: string | null;
   deckMonitorName: string | null;
   autoDeck: boolean;
+  showInTaskbar: boolean;
 };
 
 export type InstalledGame = { id: string; title: string; source: "steam" | "epic"; launch: string; art: string | null };
@@ -60,6 +61,7 @@ export const api = {
   getConfig: () => invoke<Config>("get_config"),
   setDeckMonitor: (devicePath: string, name: string) => invoke<void>("set_deck_monitor", { devicePath, name }),
   setAutoDeck: (enabled: boolean) => invoke<void>("set_auto_deck", { enabled }),
+  setShowInTaskbar: (enabled: boolean) => invoke<void>("set_show_in_taskbar", { enabled }),
   deckStatus: () => invoke<DeckStatus>("deck_status"),
   deckEnter: () => invoke<void>("deck_enter"),
   deckExit: () => invoke<void>("deck_exit"),

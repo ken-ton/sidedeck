@@ -141,6 +141,19 @@ export default function Settings({ deck, status, onDeckChange, toggleShortcutErr
                   )}
                 </>
               )}
+              <label className="switch-row">
+                <span>タスクバーに表示する</span>
+                <input
+                  type="checkbox"
+                  className="switch"
+                  checked={config.showInTaskbar}
+                  onChange={async (e) => {
+                    await api.setShowInTaskbar(e.target.checked);
+                    reload();
+                  }}
+                />
+              </label>
+              <p className="hint">Deck モード中は、オンにしていてもタスクバーには表示しません。</p>
             </section>
           </>
         )}

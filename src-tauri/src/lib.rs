@@ -97,6 +97,17 @@ fn emit_status(app: &AppHandle) {
     let _ = app.emit("deck-status", status(app));
 }
 
+/// 表示・非表示や Deck モードを切り替えたあとに呼ぶ。
+/// 隠れているウィンドウをタスクバーに足すとボタンだけが残り、Deck モード中はボタンを押すとデッキが最小化されるので、どちらでも出さない。
+fn sync_taskbar(app: &AppHandle) {
+    let Some(win) = app.get_webview_window("main") else { return };
+    let st = app.state::<AppState>();
+    let wanted = st.config.lock().unwrap().show_in_taskbar;
+    let active = st.deck.lock().unwrap().active;
+    let show = wanted && !active && win.is_visible().unwrap_or(false);
+    let _ = win.set_skip_taskbar(!show);
+}
+
 fn place_main_fullscreen(app: &AppHandle) {
     let (x, y, w, h) = app.state::<AppState>().deck.lock().unwrap().rect;
     if let Some(win) = app.get_webview_window("main") {
@@ -106,6 +117,7 @@ fn place_main_fullscreen(app: &AppHandle) {
         input::set_noactivate(&win, true);
         let _ = win.show();
     }
+    sync_taskbar(app);
 }
 
 /// Deck モード中は前面／背面を切り替え、そうでなければウィンドウを開く。
@@ -117,9 +129,7 @@ pub(crate) fn toggle_deck_front(app: &AppHandle) {
         (d.active, d.rect)
     };
     if !active {
-        let _ = win.unminimize();
-        let _ = win.show();
-        let _ = win.set_focus();
+        show_main(app);
         return;
     }
     let Ok(hwnd) = win.hwnd() else { return };
@@ -195,6 +205,7 @@ fn exit_deck(app: &AppHandle) -> Result<(), String> {
         let _ = win.center();
         let _ = win.show();
     }
+    sync_taskbar(app);
     emit_status(app);
     Ok(())
 }
@@ -256,12 +267,26 @@ struct ConfigView {
     deck_monitor: Option<String>,
     deck_monitor_name: Option<String>,
     auto_deck: bool,
+    show_in_taskbar: bool,
 }
 
 #[tauri::command]
 async fn get_config(app: AppHandle) -> ConfigView {
     let c = app.state::<AppState>().config.lock().unwrap().clone();
-    ConfigView { deck_monitor: c.deck_monitor, deck_monitor_name: c.deck_monitor_name, auto_deck: c.auto_deck }
+    ConfigView {
+        deck_monitor: c.deck_monitor,
+        deck_monitor_name: c.deck_monitor_name,
+        auto_deck: c.auto_deck,
+        show_in_taskbar: c.show_in_taskbar,
+    }
+}
+
+#[tauri::command]
+async fn set_show_in_taskbar(app: AppHandle, enabled: bool) {
+    let st = app.state::<AppState>();
+    st.config.lock().unwrap().show_in_taskbar = enabled;
+    st.save();
+    sync_taskbar(&app);
 }
 
 #[tauri::command]
@@ -722,13 +747,14 @@ async fn set_power_plan(id: String) -> CmdResult<()> {
     system::set_power_plan(&id)
 }
 
-// タスクバーに出さないので、最小化されたままだと戻す手段がない
+// タスクバーに出さない設定だと、最小化されたままでは戻す手段がない
 fn show_main(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("main") {
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
     }
+    sync_taskbar(app);
 }
 
 fn build_tray(app: &tauri::App) -> tauri::Result<()> {
@@ -808,6 +834,7 @@ pub fn run() {
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.show();
                 }
+                sync_taskbar(app.handle());
             }
 
             plugins::init(app.handle(), config_dir.join("plugins"));
@@ -823,6 +850,7 @@ pub fn run() {
                 if window.label() == "main" {
                     api.prevent_close();
                     let _ = window.hide();
+                    sync_taskbar(window.app_handle());
                 }
             }
         })
@@ -831,6 +859,7 @@ pub fn run() {
             get_config,
             set_deck_monitor,
             set_auto_deck,
+            set_show_in_taskbar,
             deck_status,
             deck_enter,
             deck_exit,
