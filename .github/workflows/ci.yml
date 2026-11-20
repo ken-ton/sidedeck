@@ -26,6 +26,13 @@ jobs:
         with:
           workspaces: src-tauri
 
+      # ランナーの MSVC が更新されると、キャッシュに残った CMake の設定が古いコンパイラを指して whisper のビルドが失敗する
+      - name: Drop stale CMake build directories
+        shell: pwsh
+        run: |
+          Get-ChildItem src-tauri/target -Recurse -Filter CMakeCache.txt -ErrorAction SilentlyContinue |
+            ForEach-Object { Remove-Item $_.Directory.FullName -Recurse -Force }
+
       - name: Install dependencies
         run: npm ci
 
