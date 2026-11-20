@@ -12,7 +12,7 @@ jobs:
   release:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # タグとアプリのバージョンがずれたまま公開しないように
       - name: Check that the tag matches the app version
@@ -23,7 +23,7 @@ jobs:
             throw "タグ ${{ github.ref_name }} と tauri.conf.json のバージョン $version が一致しません"
           }
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: lts/*
           cache: npm
