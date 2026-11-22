@@ -35,6 +35,8 @@ export type Action =
   /** app は小文字のプロセス名、monitor はモニターのデバイスパス */
   | { type: "window"; command: WindowCommand; app: string; launch: string; monitor: string }
   | { type: "assistant" }
+  /** months は開いた画面に並べる月数（1〜3） */
+  | { type: "calendar"; months: number }
   /** channel は 1〜16。押したときに value を、離したときに 0（Note Off）を送る */
   | { type: "midi"; port: string; kind: MidiKind; channel: number; number: number; value: number }
   | { type: "plugin"; pluginId: string; actionId: string; settings: Record<string, unknown> };
@@ -242,7 +244,7 @@ export type HoldType = Hold["type"];
 export type ToggleState = { label: string; icon: Icon; color: string | null; action: Action };
 
 /** それ自体が状態を持つ操作や、画面内で完結する操作はトグルにしない */
-const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing", "obs", "assistant", "midi"];
+const NO_TOGGLE: ActionType[] = ["page", "system_panel", "macro", "plugin", "mic_mute", "system", "timer", "sound", "now_playing", "obs", "assistant", "midi", "calendar"];
 
 export const canToggle = (a: Action) => !NO_TOGGLE.includes(a.type);
 
@@ -261,7 +263,7 @@ export const REPEAT_INTERVALS = [50, 100, 200, 500];
 export const HOLD_ACTION_EXCLUDE: ActionType[] = ["page", "plugin", "timer", "assistant"];
 
 /** 連打できない種類（繰り返すと開閉や開始・停止を往復してしまう） */
-const NO_REPEAT: ActionType[] = ["page", "system_panel", "macro", "system", "timer", "sound", "now_playing", "obs"];
+const NO_REPEAT: ActionType[] = ["page", "system_panel", "calendar","macro", "system", "timer", "sound", "now_playing", "obs"];
 
 export function holdTypesFor(action: Action): HoldType[] {
   const types: HoldType[] = [];
@@ -388,7 +390,7 @@ export const OBS_EVENT_LABELS: Record<ObsEvent, string> = {
 };
 
 /** ボタンがないと意味をなさない操作は、自動化では選べない */
-export const AUTOMATION_EXCLUDE: ActionType[] = ["page", "system_panel", "timer", "assistant"];
+export const AUTOMATION_EXCLUDE: ActionType[] = ["page", "system_panel", "calendar","timer", "assistant"];
 
 export function emptyTrigger(type: TriggerType): Trigger {
   switch (type) {
@@ -443,6 +445,7 @@ export const ACTION_LABELS: Record<ActionType, string> = {
   obs: "OBS",
   midi: "MIDI",
   assistant: "AI アシスタント",
+  calendar: "カレンダー",
   plugin: "プラグイン",
 };
 
@@ -450,7 +453,7 @@ export const ACTION_GROUPS: { label: string; types: ActionType[] }[] = [
   { label: "開く・移動", types: ["launch", "page", "window"] },
   { label: "キー入力", types: ["hotkey", "text", "macro"] },
   { label: "音声・システム", types: ["media", "now_playing", "mic_mute", "audio_device", "system_panel", "system"] },
-  { label: "ツール", types: ["timer", "sound", "assistant"] },
+  { label: "ツール", types: ["timer", "sound", "calendar", "assistant"] },
   { label: "連携", types: ["obs", "midi", "plugin"] },
 ];
 
@@ -556,12 +559,14 @@ export function emptyAction(type: ActionType): Action {
       return { type, port: "", kind: "note", channel: 1, number: 60, value: 127 };
     case "plugin":
       return { type, pluginId: "", actionId: "", settings: {} };
+    case "calendar":
+      return { type, months: 3 };
     default:
       return { type } as Action;
   }
 }
 
-export const runsInBackend =(a: Action) => !["none", "page", "system_panel", "timer", "sound", "obs", "assistant", "midi"].includes(a.type);
+export const runsInBackend =(a: Action) => !["none", "page", "system_panel", "timer", "sound", "obs", "assistant", "midi", "calendar"].includes(a.type);
 
 const btn = (slot: number, label: string, emoji: string, action: Action, color: string | null = null): DeckButton => ({
   id: uid(),

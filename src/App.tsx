@@ -11,6 +11,7 @@ import AssistantPad from "./AssistantPad";
 import { assistant } from "./assistant";
 import Settings from "./Settings";
 import SystemPanel from "./SystemPanel";
+import CalendarPanel from "./Calendar";
 import { onSoundsChange, playSound, stopSounds } from "./sound";
 import { obs, ObsState } from "./obs";
 
@@ -187,6 +188,8 @@ export default function App() {
   const [clipboard, setClipboard] = useState<{ button: DeckButton; pages: Page[] } | null>(null);
   const [pageEdit, setPageEdit] = useState<Page | null>(null);
   const [overlay, setOverlay] = useState<"settings" | "system" | null>(null);
+  /** 開いているカレンダーに並べる月数 */
+  const [calendar, setCalendar] = useState<number | null>(null);
   const [status, setStatus] = useState<DeckStatus>({ active: false, monitorConnected: false });
   const [states, setStates] = useState<States>({ micMuted: null, defaultOutput: null });
   const [outputs, setOutputs] = useState<AudioDevice[]>([]);
@@ -574,6 +577,7 @@ export default function App() {
       return;
     }
     if (a.type === "system_panel") return setOverlay("system");
+    if (a.type === "calendar") return setCalendar(a.months);
     // ショートカットや自動化から実行したときは、押してすぐ離したことにする
     if (a.type === "midi") {
       try {
@@ -1178,6 +1182,7 @@ export default function App() {
       )}
 
       {overlay === "system" && <SystemPanel onClose={() => setOverlay(null)} />}
+      {calendar !== null && <CalendarPanel months={calendar} onClose={() => setCalendar(null)} />}
       {overlay === "settings" && (
         <Settings
           deck={deck}

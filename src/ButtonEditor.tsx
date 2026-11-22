@@ -184,7 +184,7 @@ export default function ButtonEditor({ initial, isNew, deck, onSave, onDelete, o
       folder = { id: uid(), name: b.label || "フォルダ", folder: true, buttons: [] };
       button = { ...button, action: { type: "page", pageId: folder.id } };
     }
-    if (!button.label && !button.icon && !button.info) button = { ...button, label: ACTION_LABELS[a.type] };
+    if (!button.label && !button.icon && !button.info && a.type !== "calendar") button = { ...button, label: ACTION_LABELS[a.type] };
     onSave(button, folder);
   };
 

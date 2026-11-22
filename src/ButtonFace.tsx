@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { DeckButton } from "./deck";
+import { CalendarFace } from "./Calendar";
 
 /**
  * U+FE0E を付けて、白黒の字形がある絵文字はそちらを使わせる。
@@ -25,6 +26,7 @@ export default function ButtonFace({ button, sub, override, background, table, l
 }) {
   const label = override?.title ?? button.label;
   const icon = override?.icon ? ({ kind: "image", src: override.icon } as const) : button.icon;
+  if (button.action.type === "calendar" && !label && !icon) return <CalendarFace />;
   return (
     <>
       {background}

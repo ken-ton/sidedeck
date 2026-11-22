@@ -521,7 +521,22 @@ export default function ActionEditor({ action, onChange, folders, exclude = [], 
           {action.type === "assistant" && (
             <p className="hint">タップして話しかけると、Claude が声で答えます。話している間にタップすると止まり、長押しで会話をリセットします。API キーと声は設定の「AI アシスタント」で選びます。大きさは 2×2 がおすすめです。</p>
           )}
-          {action.type === "system_panel" && <p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
+          {action.type === "calendar" && (
+            <>
+              <h3 className="sub-heading">タップして開いたときに並べる月数</h3>
+              <div className="chips wrap">
+                {[1, 2, 3].map((n) => (
+                  <button key={n} className={action.months === n ? "on" : ""} onClick={() => onChange({ ...action, months: n })}>
+                    {n} か月
+                  </button>
+                ))}
+              </div>
+              <p className="hint">
+                名前とアイコンを空にすると、ボタンに今月のカレンダーを表示します（大きさは 2×2 がおすすめです）。タップすると、今月からのカレンダーを開きます。日本の祝日は赤で表示します。
+              </p>
+            </>
+          )}
+          {action.type === "system_panel" &&<p className="hint">音量・明るさ・解像度・電源プランのパネルを開きます。</p>}
         </div>
       )}
     </>
